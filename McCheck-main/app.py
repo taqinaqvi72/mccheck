@@ -323,7 +323,7 @@ PLAN_INFO = {
     "demo": {
         "label": "Demo",
         "price_pkr": 0,
-        "total_limit": 6500,   # can check 5000 MC total, then must upgrade
+        "total_limit": 1000,   # can check 1000 MC total, then must upgrade
         "daily_limit": None,
         "unlimited": False,
     },
