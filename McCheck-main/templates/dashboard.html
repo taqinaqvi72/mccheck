@@ -2436,6 +2436,26 @@ async function startRun() {
     true;
 
 
+  // FIX: start the 1s polling loop immediately instead of waiting for the
+  // first poll() call to see running:true. Previously, if the background
+  // scan thread hadn't flipped jobs[job_id]["running"] to True yet by the
+  // time this first poll() resolved (a race condition), data.running came
+  // back false and setInterval() never got scheduled — so nothing polled
+  // again until the user navigated to another page and back (which re-ran
+  // this script from scratch). Starting the interval here guarantees a
+  // poll every second right away; the existing "!data.running && polling"
+  // check inside poll() still clears it cleanly once the scan finishes.
+  if (!polling) {
+
+    polling =
+      setInterval(
+        poll,
+        1000
+      );
+
+  }
+
+
   poll();
 
 }
