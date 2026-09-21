@@ -192,19 +192,18 @@ def init_db():
 
 def _seed_default_users():
     conn = get_conn()
+    defaults = [
+        ("Demo", "demo@gmail.com", generate_password_hash("demo@123"), "demo", False),
+        ("Demo", "demo2@gmail.com", generate_password_hash("demo@1234"), "demo", False),
+        ("Bluetruckinllc", "Bluetruckinllc@gmail.com", generate_password_hash("admin@123"), "lifetime", False),
+        ("Taqi", "syedtaqirazanaqvishah@gmail.com", generate_password_hash("taqi@123"), "lifetime", False),
+    ]
     with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) AS c FROM users")
-        if cur.fetchone()["c"] > 0:
-            return
-        defaults = [
-    ("Demo", "demo@gmail.com", generate_password_hash("demo@123"), "demo", False),
-    ("Demo", "demo2@gmail.com", generate_password_hash("demo@1234"), "demo", False),
-    ("Bluetruckinllc", "Bluetruckinllc@gmail.com", generate_password_hash("admin@123"), "lifetime", False),
-    ("Taqi", "syedtaqirazanaqvishah@gmail.com", generate_password_hash("taqi@123"), "lifetime", False),
-]
         for username, email, pw_hash, plan, is_admin in defaults:
             cur.execute(
-                "INSERT INTO users (username, email, password_hash, plan, created, is_admin) VALUES (%s, %s, %s, %s, %s, %s)",
+                """INSERT INTO users (username, email, password_hash, plan, created, is_admin)
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (username) DO NOTHING""",
                 (username, email, pw_hash, plan, time.time(), is_admin),
             )
     conn.commit()
