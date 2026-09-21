@@ -142,13 +142,7 @@ db.init_db()
 # following the same pattern — the fallback logic groups proxies by their
 # "user" credential automatically, so no other code changes are needed.
 PROXIES = [
-    # Webshare account 0
-    ("31.59.20.176", "6754", "fvcyvpch", "ndx7ibqimbx5", "http"),
-    ("45.38.107.97", "6014", "fvcyvpch", "ndx7ibqimbx5", "http"),
-    ("198.105.121.200", "6462", "fvcyvpch", "ndx7ibqimbx5", "http"),
-    ("198.23.243.226", "6361", "fvcyvpch", "ndx7ibqimbx5", "http"),
-    ("38.154.185.97", "6370", "fvcyvpch", "ndx7ibqimbx5", "http"),
-    ("191.96.254.138", "6185", "fvcyvpch", "ndx7ibqimbx5", "http"),
+ 
 
     # Webshare account 1
     ("31.59.20.176", "6754", "fuedjjpa", "leyr4v55figr", "http"),
@@ -159,21 +153,22 @@ PROXIES = [
     ("191.96.254.138", "6185", "fuedjjpa", "leyr4v55figr", "http"),
 
     
-    # Webshare account 2
-    ("31.59.20.176", "6754", "eshqlnvg", "oyf22oyg6ldf", "http"),
-    ("45.38.107.97", "6014", "eshqlnvg", "oyf22oyg6ldf", "http"),
-    ("198.105.121.200", "6462", "eshqlnvg", "oyf22oyg6ldf", "http"),
-    ("198.23.243.226", "6361", "eshqlnvg", "oyf22oyg6ldf", "http"),
-    ("38.154.185.97", "6370", "eshqlnvg", "oyf22oyg6ldf", "http"),
-    ("191.96.254.138", "6185", "eshqlnvg", "oyf22oyg6ldf", "http"),
 
-    # giftshopacc
-    ("31.59.20.176", "6754", "qzvtstau", "r8kz3itfpupb", "http"),
-    ("45.38.107.97", "6014", "qzvtstau", "r8kz3itfpupb", "http"),
-    ("198.105.121.200", "6462", "qzvtstau", "r8kz3itfpupb", "http"),
-    ("198.23.243.226", "6361", "qzvtstau", "r8kz3itfpupb", "http"),
-    ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
-    ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
+ # acc 1 (usa)
+    ("31.59.20.176", "6754", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("45.38.107.97", "6014", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("198.105.121.200", "6462", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("198.23.243.226", "6361", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("38.154.185.97", "6370", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("191.96.254.138", "6185", "olkeghlt", "an5xy7l0kjcp", "http"),
+
+    # acc 2 (taqinaqvi0377)
+    ("31.59.20.176", "6754", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("45.38.107.97", "6014", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("198.105.121.200", "6462", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("198.23.243.226", "6361", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("38.154.185.97", "6370", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("191.96.254.138", "6185", "ktgrlvyr", "svo2ci5t400v", "http"),
 ]
 _proxy_index = [0]
 _proxy_lock = threading.Lock()
