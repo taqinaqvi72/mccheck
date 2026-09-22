@@ -155,6 +155,13 @@ def init_db():
             attempts INTEGER DEFAULT 0,
             last_sent DOUBLE PRECISION NOT NULL
         )""",
+        """CREATE TABLE IF NOT EXISTS call_status (
+            username TEXT NOT NULL,
+            mc_number TEXT NOT NULL,
+            status TEXT NOT NULL,
+            updated TEXT,
+            PRIMARY KEY (username, mc_number)
+        )""",
     ]
 
     for stmt in table_statements:
@@ -655,4 +662,33 @@ def delete_reset_otp(username):
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute("DELETE FROM reset_otps WHERE username = %s", (username,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Call status (green = good response, yellow = no answer, red = not
+# interested / don't call again) — one status per user per MC number,
+# used by the Qualified Carriers page's 3 status buttons.
+# ---------------------------------------------------------------------------
+def get_call_statuses(username):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT mc_number, status FROM call_status WHERE username = %s", (username,)
+        )
+        rows = cur.fetchall()
+    return {r["mc_number"]: r["status"] for r in rows}
+
+
+def set_call_status(username, mc_number, status):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO call_status (username, mc_number, status, updated)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (username, mc_number) DO UPDATE SET
+                   status = EXCLUDED.status,
+                   updated = EXCLUDED.updated""",
+            (username, str(mc_number), status, time.strftime("%Y-%m-%d %H:%M")),
+        )
     conn.commit()
