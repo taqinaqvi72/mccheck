@@ -130,6 +130,10 @@
     }
 
 
+    /* =====================================================
+       SIDEBAR BRAND / LOGO
+       ===================================================== */
+
     .sb-brand {
       display: flex;
       align-items: center;
@@ -148,34 +152,24 @@
       justify-content: center;
 
       flex-shrink: 0;
+
       background: transparent;
       border: none;
       border-radius: 0;
       overflow: hidden;
       padding: 0;
+
       box-shadow: none;
     }
 
     .sb-logo img {
       width: 100%;
       height: 100%;
+
       display: block;
+
       object-fit: contain;
       object-position: center;
-    }
-
-    /* Light theme uses the white-background logo.
-       Dark theme uses the transparent/dark-background logo. */
-    .sb-logo .logo-dark {
-      display: none;
-    }
-
-    html[data-theme="dark"] .sb-logo .logo-light {
-      display: none;
-    }
-
-    html[data-theme="dark"] .sb-logo .logo-dark {
-      display: block;
     }
 
 
@@ -721,21 +715,10 @@
     <div class="sb-brand">
 
       <div class="sb-logo">
-
-        <!-- Light mode logo -->
         <img
-          class="logo-light"
-          src="{{ url_for('static', filename='logomelight.png') }}"
-          alt="Truck Services Solutions"
-        >
-
-        <!-- Dark mode logo -->
-        <img
-          class="logo-dark"
           src="{{ url_for('static', filename='logome.png') }}"
           alt="Truck Services Solutions"
         >
-
       </div>
 
     </div>
