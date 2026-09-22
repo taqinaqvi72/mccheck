@@ -27,10 +27,10 @@ body { font-family: "Inter", sans-serif; background: #090b0d; color: #ffffff; ov
 .login-area { width: 400px; max-width: 100%; animation: loginIn 0.85s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes loginIn { from { opacity: 0; transform: translateX(55px) scale(.97); } to { opacity: 1; transform: translateX(0) scale(1); } }
 .login-card { width: 100%; padding: 29px 30px 24px; border-radius: 17px; background: linear-gradient(145deg, rgba(17,21,23,0.94), rgba(10,13,14,0.91)); border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 28px 75px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.05); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.card-brand { display: flex; align-items: center; justify-content: center; width: 100%; margin-bottom: 23px; }
+.card-brand { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; margin-bottom: 23px; text-align: center; }
 .card-brand .brand-icon { width: 285px; height: 105px; }
-.card-brand-name { font-size: 23px; line-height: 1; font-weight: 800; letter-spacing: -1px; }
-.card-brand-sub { margin-top: 5px; font-size: 7px; font-weight: 600; letter-spacing: 1.3px; color: rgba(255,255,255,0.58); text-transform: uppercase; }
+.card-brand-name { margin-top: 4px; font-size: 17px; line-height: 1.15; font-weight: 800; letter-spacing: -0.45px; color: #ffffff; }
+.card-brand-sub { margin-top: 5px; font-size: 7px; font-weight: 600; letter-spacing: 1.5px; color: rgba(255,255,255,0.52); text-transform: uppercase; }
 :root { --orange: #ff6900; --orange-light: #ff7d1a; --orange-dark: #df5300; }
 .orange { color: var(--orange); }
 .title { font-size: 27px; line-height: 1.15; font-weight: 700; letter-spacing: -1px; margin-bottom: 7px; }
@@ -86,7 +86,7 @@ input:focus { border-color: rgba(255,105,0,0.65); background: rgba(255,255,255,0
 .footer-link:hover { color: white; }
 @media (max-width: 1050px) { .main { padding-right: 4vw; } .login-area { width: 380px; } .footer { padding: 0 3vw; } }
 @media (max-width: 800px) { .page { min-height: 100vh; background: #111; } .background { position: fixed; background-position: 57% center; } .top-nav { padding: 0 20px; height: 68px; } .online { display: none; } .main { min-height: 100vh; padding: 85px 20px 120px; justify-content: center; align-items: center; } .login-area { width: min(410px, 100%); } .login-card { padding: 25px 22px 21px; } .footer { position: relative; min-height: auto; padding: 15px 20px; flex-direction: column; justify-content: center; gap: 12px; } .footer-left { display: none; } .copyright { order: 1; } .footer-links { order: 2; } }
-@media (max-width: 450px) { .brand-icon { width: 155px; height: 60px; } .card-brand .brand-icon { width: 245px; height: 90px; } .title { font-size: 24px; } .login-card { padding: 23px 18px 19px; border-radius: 14px; } .footer-links { gap: 13px; } }
+@media (max-width: 450px) { .brand-icon { width: 155px; height: 60px; } .card-brand .brand-icon { width: 245px; height: 90px; } .card-brand-name { font-size: 15px; } .card-brand-sub { font-size: 6px; letter-spacing: 1.2px; } .title { font-size: 24px; } .login-card { padding: 23px 18px 19px; border-radius: 14px; } .footer-links { gap: 13px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
 </style>
 </head>
@@ -106,9 +106,13 @@ input:focus { border-color: rgba(255,105,0,0.65); background: rgba(255,255,255,0
 <section class="login-area">
 <div class="login-card">
 <div class="card-brand">
-<div class="brand-icon">
-<img src="/static/logome.png" alt="Truck Services Solutions Logo">
-</div>
+  <div class="brand-icon">
+    <img src="/static/logome.png" alt="Truck Services Solutions Logo">
+  </div>
+  <div class="card-brand-text">
+    <div class="card-brand-name">Truck Services Solutions</div>
+    <div class="card-brand-sub">Reliable Freight Forwarder</div>
+  </div>
 </div>
 <h1 class="title">Welcome Back</h1>
 <p class="subtitle">Sign in to your dispatcher workspace</p>
