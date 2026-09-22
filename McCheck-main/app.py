@@ -142,13 +142,7 @@ db.init_db()
 # following the same pattern — the fallback logic groups proxies by their
 # "user" credential automatically, so no other code changes are needed.
 PROXIES = [
- 
-
- 
-
-    
-
- # acc 1 (usa)
+    # acc 1 (usa)
     ("31.59.20.176", "6754", "olkeghlt", "an5xy7l0kjcp", "http"),
     ("45.38.107.97", "6014", "olkeghlt", "an5xy7l0kjcp", "http"),
     ("198.105.121.200", "6462", "olkeghlt", "an5xy7l0kjcp", "http"),
@@ -163,7 +157,8 @@ PROXIES = [
     ("198.23.243.226", "6361", "ktgrlvyr", "svo2ci5t400v", "http"),
     ("38.154.185.97", "6370", "ktgrlvyr", "svo2ci5t400v", "http"),
     ("191.96.254.138", "6185", "ktgrlvyr", "svo2ci5t400v", "http"),
-   # Webshare account 1
+
+    # Webshare account 1
     ("31.59.20.176", "6754", "fuedjjpa", "leyr4v55figr", "http"),
     ("45.38.107.97", "6014", "fuedjjpa", "leyr4v55figr", "http"),
     ("198.105.121.200", "6462", "fuedjjpa", "leyr4v55figr", "http"),
@@ -171,8 +166,7 @@ PROXIES = [
     ("38.154.185.97", "6370", "fuedjjpa", "leyr4v55figr", "http"),
     ("191.96.254.138", "6185", "fuedjjpa", "leyr4v55figr", "http"),
 
-
- # giftshopacc
+    # giftshopacc
     ("31.59.20.176", "6754", "qzvtstau", "r8kz3itfpupb", "http"),
     ("45.38.107.97", "6014", "qzvtstau", "r8kz3itfpupb", "http"),
     ("198.105.121.200", "6462", "qzvtstau", "r8kz3itfpupb", "http"),
@@ -1411,6 +1405,29 @@ def get_settings():
 def save_settings():
     data = request.get_json(force=True)
     db.save_prefs(session["username"], data)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Call status API (green = good response, yellow = no answer, red = not
+# interested / don't call again) — used by the Qualified Carriers page's
+# 3 status buttons. Stored per user per MC number so it survives refreshes.
+# ---------------------------------------------------------------------------
+@app.route("/api/call-status", methods=["GET"])
+@login_required
+def get_call_status_route():
+    return jsonify(db.get_call_statuses(session["username"]))
+
+
+@app.route("/api/call-status", methods=["POST"])
+@login_required
+def set_call_status_route():
+    data = request.get_json(force=True)
+    mc_number = data.get("mc_number")
+    status = data.get("status")
+    if not mc_number or status not in ("green", "yellow", "red"):
+        return jsonify({"error": "Invalid mc_number or status"}), 400
+    db.set_call_status(session["username"], mc_number, status)
     return jsonify({"ok": True})
 
 
