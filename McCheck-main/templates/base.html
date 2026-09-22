@@ -130,55 +130,46 @@
     }
 
 
+    /* =====================================================
+       SIDEBAR BRAND / LOGO
+       ===================================================== */
+
     .sb-brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      justify-content: center;
 
-      padding: 5px 10px 28px;
+      width: 100%;
+      padding: 8px 4px 30px;
     }
 
     .sb-logo {
-      width: 48px;
-      height: 48px;
-
-      flex-shrink: 0;
-
-      border-radius: 10px;
+      width: 225px;
+      height: 115px;
 
       display: flex;
       align-items: center;
       justify-content: center;
 
-      background: #ffffff;
-      border: 1px solid var(--border);
-      overflow: hidden;
-      padding: 4px;
+      flex-shrink: 0;
 
-      box-shadow:
-        0 5px 12px rgba(23,34,53,.08);
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      overflow: hidden;
+      padding: 0;
+
+      box-shadow: none;
     }
 
     .sb-logo img {
       width: 100%;
       height: 100%;
+
+      display: block;
+
       object-fit: contain;
-    }
-
-    .sb-brand-text .name {
-      font-size: 17px;
-      font-weight: 800;
-      letter-spacing: -.4px;
-    }
-
-    .sb-brand-text .tag {
-      margin-top: 2px;
-
-      font-size: 9px;
-      font-weight: 500;
-
-      color: var(--muted);
-      letter-spacing: .02em;
+      object-position: center;
     }
 
 
@@ -724,20 +715,10 @@
     <div class="sb-brand">
 
       <div class="sb-logo">
-
-<img src="{{ url_for('static', filename='logome.png') }}" alt="Truck Services Solutions Logo">
-      </div>
-
-
-      <div class="sb-brand-text">
-
-        <div class="name">
-TSS        </div>
-
-        <div class="tag">
-          CARRIER INTELLIGENCE CONSOLE
-        </div>
-
+        <img
+          src="{{ url_for('static', filename='logome.png') }}"
+          alt="Truck Services Solutions"
+        >
       </div>
 
     </div>
