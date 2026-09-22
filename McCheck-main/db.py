@@ -179,18 +179,19 @@ def init_db():
         print(f"[db.init_db] Skipped is_admin column migration (will retry next start): {e}")
 
     _seed_default_users()
-    # Make sure the K&A admin account is always marked admin, even on a
-    # database that already existed before is_admin was introduced.
-    try:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE users SET is_admin = TRUE WHERE email = %s", ("ka@gmail.com",))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"[db.init_db] Skipped admin-flag backfill (will retry next start): {e}")
 
 
 def _seed_default_users():
+    """Insert the default/admin accounts if they don't already exist.
+
+    Uses ON CONFLICT (username) DO NOTHING per-row instead of a
+    "SELECT COUNT(*) == 0" guard. The count-check approach has a race
+    condition: if two workers/deploys run init_db() around the same time,
+    both can see an empty table and both try to INSERT the same rows —
+    the second one crashes with a duplicate-key error and the whole app
+    fails to boot. ON CONFLICT DO NOTHING makes each insert safe on its
+    own regardless of how many times or how concurrently this runs.
+    """
     conn = get_conn()
     defaults = [
         ("Demo", "demo@gmail.com", generate_password_hash("demo@123"), "demo", False),
