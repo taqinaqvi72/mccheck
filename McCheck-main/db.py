@@ -213,7 +213,8 @@ def _seed_default_users():
         ("Demo", "demo2@gmail.com", generate_password_hash("demo@1234"), "demo", False),
         ("Bluetruckinllc", "Bluetruckinllc@gmail.com", generate_password_hash("admin@123"), "lifetime", False),
         ("user1", "user1@gmail.com", generate_password_hash("user@123"), "1 Month", False),
-        ("user2", "user2@gmail.com", generate_password_hash("user@1234"), "lifetime", False),
+        ("user2", "user2@gmail.com", generate_password_hash("user@1234"), "1 Month", False),
+        ("user3", "user3@gmail.com", generate_password_hash("user@12345"), "1 Month", False),
 
         ("Taqi", "syedtaqirazanaqvishah@gmail.com", generate_password_hash("taqi@123"), "lifetime", False),
     ]
