@@ -69,11 +69,11 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 # verified email, so it's fine for testing but won't reach real signups —
 # verify your own domain in Resend for production).
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "K&A <onboarding@resend.dev>")
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "Taqi Naqvi<onboarding@resend.dev>")
 # Every signup OTP is sent here instead of the address the person typed in —
 # this way whoever holds this inbox approves/hands out every signup code.
 # Change via env var if the admin inbox changes.
-OTP_NOTIFY_EMAIL = os.environ.get("OTP_NOTIFY_EMAIL", "scott.sublimefreight@gmail.com")
+OTP_NOTIFY_EMAIL = os.environ.get("OTP_NOTIFY_EMAIL", "taqinaqvi439@gmail.com")
 OTP_TTL_SECONDS = 10 * 60  # OTP valid for 10 minutes
 OTP_RESEND_COOLDOWN_SECONDS = 60  # can't request a new OTP more than once a minute
 OTP_MAX_ATTEMPTS = 5  # wrong-code attempts allowed before the OTP is invalidated
@@ -98,7 +98,7 @@ def send_otp_email(signup_email, otp):
 def send_reset_otp_email(username, email, otp):
     """Sends a password-reset OTP for `username` to the admin inbox."""
     return _send_admin_otp_email(
-        subject=f"K&A password reset code for {username}",
+        subject=f"Password reset code for {username}",
         html=(
             f"<p><b>{username}</b> ({email}) is requesting a password reset.</p>"
             f"<p>Their verification code is:</p>"
