@@ -144,13 +144,7 @@ db.init_db()
 PROXIES = [
  
 
-    # Webshare account 1
-    ("31.59.20.176", "6754", "fuedjjpa", "leyr4v55figr", "http"),
-    ("45.38.107.97", "6014", "fuedjjpa", "leyr4v55figr", "http"),
-    ("198.105.121.200", "6462", "fuedjjpa", "leyr4v55figr", "http"),
-    ("198.23.243.226", "6361", "fuedjjpa", "leyr4v55figr", "http"),
-    ("38.154.185.97", "6370", "fuedjjpa", "leyr4v55figr", "http"),
-    ("191.96.254.138", "6185", "fuedjjpa", "leyr4v55figr", "http"),
+ 
 
     
 
@@ -169,6 +163,22 @@ PROXIES = [
     ("198.23.243.226", "6361", "ktgrlvyr", "svo2ci5t400v", "http"),
     ("38.154.185.97", "6370", "ktgrlvyr", "svo2ci5t400v", "http"),
     ("191.96.254.138", "6185", "ktgrlvyr", "svo2ci5t400v", "http"),
+   # Webshare account 1
+    ("31.59.20.176", "6754", "fuedjjpa", "leyr4v55figr", "http"),
+    ("45.38.107.97", "6014", "fuedjjpa", "leyr4v55figr", "http"),
+    ("198.105.121.200", "6462", "fuedjjpa", "leyr4v55figr", "http"),
+    ("198.23.243.226", "6361", "fuedjjpa", "leyr4v55figr", "http"),
+    ("38.154.185.97", "6370", "fuedjjpa", "leyr4v55figr", "http"),
+    ("191.96.254.138", "6185", "fuedjjpa", "leyr4v55figr", "http"),
+
+
+ # giftshopacc
+    ("31.59.20.176", "6754", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("45.38.107.97", "6014", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("198.105.121.200", "6462", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("198.23.243.226", "6361", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
 ]
 _proxy_index = [0]
 _proxy_lock = threading.Lock()
