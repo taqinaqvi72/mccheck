@@ -355,6 +355,73 @@ html[data-theme="dark"] .qualified-hero p {
 }
 
 
+/* ---------- CALL STATUS BUTTONS (green / yellow / red) ---------- */
+
+.status-buttons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.status-btn {
+  width: 26px;
+  height: 26px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 7px;
+  cursor: pointer;
+
+  border: 1.5px solid transparent;
+  background: var(--panel-2-solid);
+
+  font-size: 13px;
+  line-height: 1;
+
+  opacity: .45;
+
+  transition: .15s ease;
+}
+
+.status-btn:hover {
+  opacity: .85;
+  transform: translateY(-1px);
+}
+
+.status-btn.green {
+  color: #0ca86b;
+}
+
+.status-btn.yellow {
+  color: #d0a000;
+}
+
+.status-btn.red {
+  color: #dc2626;
+}
+
+.status-btn.green.active {
+  opacity: 1;
+  background: rgba(12, 174, 107, .14);
+  border-color: rgba(12, 174, 107, .45);
+}
+
+.status-btn.yellow.active {
+  opacity: 1;
+  background: rgba(217, 168, 0, .14);
+  border-color: rgba(217, 168, 0, .45);
+}
+
+.status-btn.red.active {
+  opacity: 1;
+  background: rgba(220, 38, 38, .14);
+  border-color: rgba(220, 38, 38, .45);
+}
+
+
 /* ---------- EMPTY STATE ---------- */
 
 .empty-state {
@@ -454,7 +521,7 @@ html[data-theme="dark"] .qualified-hero p {
   }
 
   .qualified-table {
-    min-width: 950px;
+    min-width: 1050px;
   }
 }
 </style>
@@ -535,6 +602,18 @@ html[data-theme="dark"] .qualified-hero p {
           <option value="5">5 Power Units</option>
         </select>
 
+        <select
+          id="statusFilter"
+          class="filter-select"
+          onchange="render()"
+        >
+          <option value="">Any Call Status</option>
+          <option value="green">🟢 Good Response</option>
+          <option value="yellow">🟡 No Answer</option>
+          <option value="red">🔴 Not Interested</option>
+          <option value="none">No Status Yet</option>
+        </select>
+
       </div>
 
     </div>
@@ -549,7 +628,7 @@ html[data-theme="dark"] .qualified-hero p {
       </div>
 
       <div class="results-info">
-        Most recent scan results
+        Updates live while a scan is running
       </div>
 
     </div>
@@ -577,6 +656,9 @@ html[data-theme="dark"] .qualified-hero p {
   </div>
 
 
+  <div class="qualified-footer-note">
+    🟢 Good response &nbsp;·&nbsp; 🟡 No answer / try again &nbsp;·&nbsp; 🔴 Not interested — don't call again
+  </div>
 
 
 </div>
@@ -590,6 +672,8 @@ html[data-theme="dark"] .qualified-hero p {
 
 let allResults = [];
 let savedSet = new Set();
+let callStatusMap = {};
+let pollTimer = null;
 
 
 /* =========================================================
@@ -665,14 +749,15 @@ function escapeHtml(value) {
 
 
 /* =========================================================
-   LOAD RESULTS
+   LOAD RESULTS (full load — states dropdown, saved set,
+   call-status map, then starts the live-refresh polling)
    ========================================================= */
 
 async function loadResults() {
 
   try {
 
-    const res = await fetch('/api/results');
+    const res = await fetch('/api/results', { cache: 'no-store' });
 
     if (!res.ok) {
       throw new Error('Failed to load results');
@@ -693,6 +778,7 @@ async function loadResults() {
 
 
     const sel = document.getElementById('stateFilter');
+    const currentState = sel.value;
 
     sel.innerHTML =
       '<option value="">All States</option>' +
@@ -703,10 +789,12 @@ async function loadResults() {
         )
         .join('');
 
+    sel.value = currentState;
+
 
     /* SAVED */
 
-    const savedRes = await fetch('/api/saved');
+    const savedRes = await fetch('/api/saved', { cache: 'no-store' });
 
     if (savedRes.ok) {
 
@@ -721,7 +809,22 @@ async function loadResults() {
     }
 
 
+    /* CALL STATUS */
+
+    await refreshCallStatuses();
+
+
     render();
+
+
+    // Keep the list live: re-poll every few seconds instead of only
+    // loading once at page load. Previously this page had no polling at
+    // all, so results from an in-progress or newly finished scan never
+    // appeared until the user navigated away and back. This mirrors the
+    // Dashboard's live-update behavior.
+    if (!pollTimer) {
+      pollTimer = setInterval(pollResults, 4000);
+    }
 
   } catch (error) {
 
@@ -746,6 +849,103 @@ async function loadResults() {
 
 
 /* =========================================================
+   POLL (lightweight periodic refresh — doesn't touch the
+   state dropdown or disturb whatever filters are selected)
+   ========================================================= */
+
+async function pollResults() {
+
+  try {
+
+    const res = await fetch('/api/results', { cache: 'no-store' });
+
+    if (!res.ok) return;
+
+    const fresh = await res.json();
+
+    // Only re-render if something actually changed, so typing in the
+    // search box isn't interrupted unnecessarily.
+    if (JSON.stringify(fresh) !== JSON.stringify(allResults)) {
+      allResults = fresh;
+      render();
+    }
+
+  } catch (error) {
+    console.error('Poll error:', error);
+  }
+}
+
+
+/* =========================================================
+   CALL STATUS
+   ========================================================= */
+
+async function refreshCallStatuses() {
+
+  try {
+
+    const res = await fetch('/api/call-status', { cache: 'no-store' });
+
+    if (res.ok) {
+      callStatusMap = await res.json();
+    }
+
+  } catch (error) {
+
+    console.error('Failed to load call statuses:', error);
+
+  }
+}
+
+
+async function setStatus(mc, status) {
+
+  const mcStr = String(mc);
+
+  // Toggle off if clicking the already-active status
+  const newStatus =
+    callStatusMap[mcStr] === status
+      ? null
+      : status;
+
+  try {
+
+    if (newStatus) {
+
+      const res = await fetch('/api/call-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mc_number: mcStr, status: newStatus }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save status');
+
+      callStatusMap[mcStr] = newStatus;
+
+    } else {
+
+      // "un-set" isn't a real backend concept here — simplest is to just
+      // overwrite with the same status again would be a no-op, so we
+      // just leave it saved. Clicking the same color a second time just
+      // keeps it as-is rather than clearing, to avoid an extra DELETE
+      // route. (If you want a true "clear" button, that's a small
+      // addition — just ask.)
+      callStatusMap[mcStr] = status;
+
+    }
+
+    render();
+
+  } catch (error) {
+
+    console.error(error);
+    showToast('Unable to update call status');
+
+  }
+}
+
+
+/* =========================================================
    RENDER
    ========================================================= */
 
@@ -763,6 +963,9 @@ function render() {
   const puElement =
     document.getElementById('puFilter');
 
+  const statusElement =
+    document.getElementById('statusFilter');
+
 
   const q =
     searchElement.value
@@ -777,6 +980,9 @@ function render() {
 
   const puF =
     puElement.value;
+
+  const statusF =
+    statusElement.value;
 
 
   let rows = allResults.filter(r => {
@@ -843,6 +1049,21 @@ function render() {
     }
 
 
+    /* CALL STATUS */
+
+    if (statusF) {
+
+      const current = callStatusMap[mc];
+
+      if (statusF === 'none') {
+        if (current) return false;
+      } else if (current !== statusF) {
+        return false;
+      }
+
+    }
+
+
     return true;
 
   });
@@ -903,7 +1124,7 @@ function render() {
             <th>Phone</th>
             <th>PU</th>
             <th>Cargo</th>
-            <th>Status</th>
+            <th>Call Status</th>
             <th>Actions</th>
           </tr>
 
@@ -935,6 +1156,9 @@ function render() {
 
     const pu =
       r.power_units ?? '—';
+
+    const currentStatus =
+      callStatusMap[String(r.mc_number)] || '';
 
 
     html += `
@@ -998,12 +1222,38 @@ function render() {
         </td>
 
 
-        <!-- STATUS -->
+        <!-- CALL STATUS BUTTONS -->
 
         <td>
-          <span class="badge fresh">
-            Qualified
-          </span>
+
+          <div class="status-buttons">
+
+            <span
+              class="status-btn green ${currentStatus === 'green' ? 'active' : ''}"
+              onclick="setStatus('${mc}', 'green')"
+              title="Good response"
+            >
+              ●
+            </span>
+
+            <span
+              class="status-btn yellow ${currentStatus === 'yellow' ? 'active' : ''}"
+              onclick="setStatus('${mc}', 'yellow')"
+              title="No answer — try again"
+            >
+              ●
+            </span>
+
+            <span
+              class="status-btn red ${currentStatus === 'red' ? 'active' : ''}"
+              onclick="setStatus('${mc}', 'red')"
+              title="Not interested — don't call again"
+            >
+              ●
+            </span>
+
+          </div>
+
         </td>
 
 
