@@ -191,6 +191,14 @@ def _seed_default_users():
     the second one crashes with a duplicate-key error and the whole app
     fails to boot. ON CONFLICT DO NOTHING makes each insert safe on its
     own regardless of how many times or how concurrently this runs.
+
+    Note: the `users` table has TWO separate unique constraints — one on
+    username, one on email. ON CONFLICT (username) DO NOTHING only
+    protects against a username collision; it still crashes on an email
+    collision (a different constraint). Leaving the conflict target
+    unspecified — plain `ON CONFLICT DO NOTHING` — tells Postgres to
+    silently skip the row on a violation of ANY unique constraint on the
+    table, covering both username and email at once.
     """
     conn = get_conn()
     defaults = [
@@ -199,15 +207,26 @@ def _seed_default_users():
         ("Bluetruckinllc", "Bluetruckinllc@gmail.com", generate_password_hash("admin@123"), "lifetime", False),
         ("Taqi", "syedtaqirazanaqvishah@gmail.com", generate_password_hash("taqi@123"), "lifetime", False),
     ]
-    with conn.cursor() as cur:
-        for username, email, pw_hash, plan, is_admin in defaults:
-            cur.execute(
-                """INSERT INTO users (username, email, password_hash, plan, created, is_admin)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (username) DO NOTHING""",
-                (username, email, pw_hash, plan, time.time(), is_admin),
-            )
-    conn.commit()
+    # Each row gets its OWN try/except + commit/rollback. This is
+    # deliberately belt-and-suspenders on top of ON CONFLICT DO NOTHING:
+    # if literally anything unexpected still goes wrong on one row (a
+    # stale server still enforcing an old constraint, a transient DB
+    # hiccup, etc.), it's logged and skipped instead of taking down
+    # startup for the whole app — a boot-time seed step should never be
+    # able to crash the server.
+    for username, email, pw_hash, plan, is_admin in defaults:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO users (username, email, password_hash, plan, created, is_admin)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT DO NOTHING""",
+                    (username, email, pw_hash, plan, time.time(), is_admin),
+                )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"[db._seed_default_users] Skipped seeding '{username}': {e}")
 
 
 # ---------------------------------------------------------------------------
