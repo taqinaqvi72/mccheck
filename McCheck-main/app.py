@@ -373,8 +373,12 @@ def login_required(view):
     return wrapped
 
 
-def new_job_state():
+def new_job_state(owner_username=None):
     return {
+        # Every in-memory scan job belongs to exactly one logged-in user.
+        # This prevents a reused Flask session/job_id from exposing another
+        # account's live scan state.
+        "owner_username": owner_username,
         "running": False,
         "current": 0,
         "total": 0,
@@ -394,14 +398,27 @@ def new_job_state():
 
 
 def get_or_create_job_id():
+    username = session.get("username")
     job_id = session.get("job_id")
     is_new_job = False
+
     with jobs_lock:
-        if not job_id or job_id not in jobs:
+        current_job = jobs.get(job_id) if job_id else None
+
+        # IMPORTANT: a Flask session cookie can survive a logout/login in the
+        # same browser. If the new account inherits the previous account's
+        # job_id, it would see/control that account's live scan. Bind every
+        # job to its owner and create a fresh job whenever the owner differs.
+        if (
+            not username
+            or current_job is None
+            or current_job.get("owner_username") != username
+        ):
             job_id = str(uuid.uuid4())
-            jobs[job_id] = new_job_state()
+            jobs[job_id] = new_job_state(username)
             session["job_id"] = job_id
             is_new_job = True
+
         cleanup_old_jobs()
 
     # A brand-new job slot means this is either a first-ever visit, or the
@@ -913,6 +930,9 @@ def login():
         remember = request.form.get("remember")
         user = db.find_user_by_identifier(identifier)
         if user and check_password_hash(user["password_hash"], password):
+            # Never let a newly logged-in account inherit the previous
+            # account's in-memory scanner job from the same browser session.
+            session.pop("job_id", None)
             session["username"] = user["username"]
             # Cache admin status in the session so we don't need a DB hit
             # to check it on every request (same reasoning as login_required).
@@ -1085,6 +1105,10 @@ def forgot_password_complete():
 
 @app.route("/logout")
 def logout():
+    # Remove only this browser session's pointer. The running job itself is
+    # intentionally left alive so the user's scan can continue in the
+    # background while another account uses this browser/session.
+    session.pop("job_id", None)
     session.pop("username", None)
     session.pop("is_admin", None)
     return redirect(url_for("login"))
@@ -1177,7 +1201,7 @@ def carrier_detail(mc_number):
         job_id = session.get("job_id")
         with jobs_lock:
             st = jobs.get(job_id)
-            if st:
+            if st and st.get("owner_username") == username:
                 carrier = next((r for r in st["results"] if str(r["mc_number"]) == str(mc_number)), None)
     return render_template("carrier_detail.html", carrier=carrier, mc_number=mc_number, **base_ctx())
 
@@ -1254,7 +1278,7 @@ def stop():
 @app.route("/api/reset", methods=["POST"])
 @login_required
 def reset():
-    """Force-abandon the current job and hand the session a brand new,
+    """Force-abandon the current user's job and hand the session a brand new,
     clean job slot — used when a scan appears stuck (e.g. deep in a long
     FMCSA/proxy retry-backoff cycle) and a normal Stop isn't clearing it
     fast enough. The old job is told to stop and left to finish quietly
@@ -1267,7 +1291,7 @@ def reset():
             jobs[old_job_id]["stop_requested"] = True
 
         new_job_id = str(uuid.uuid4())
-        jobs[new_job_id] = new_job_state()
+        jobs[new_job_id] = new_job_state(session.get("username"))
         session["job_id"] = new_job_id
         cleanup_old_jobs()
 
