@@ -69,11 +69,11 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 # verified email, so it's fine for testing but won't reach real signups —
 # verify your own domain in Resend for production).
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "Taqi Naqvi<onboarding@resend.dev>")
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "K&A <onboarding@resend.dev>")
 # Every signup OTP is sent here instead of the address the person typed in —
 # this way whoever holds this inbox approves/hands out every signup code.
 # Change via env var if the admin inbox changes.
-OTP_NOTIFY_EMAIL = os.environ.get("OTP_NOTIFY_EMAIL", "taqinaqvi439@gmail.com")
+OTP_NOTIFY_EMAIL = os.environ.get("OTP_NOTIFY_EMAIL", "scott.sublimefreight@gmail.com")
 OTP_TTL_SECONDS = 10 * 60  # OTP valid for 10 minutes
 OTP_RESEND_COOLDOWN_SECONDS = 60  # can't request a new OTP more than once a minute
 OTP_MAX_ATTEMPTS = 5  # wrong-code attempts allowed before the OTP is invalidated
@@ -98,7 +98,7 @@ def send_otp_email(signup_email, otp):
 def send_reset_otp_email(username, email, otp):
     """Sends a password-reset OTP for `username` to the admin inbox."""
     return _send_admin_otp_email(
-        subject=f"Password reset code for {username}",
+        subject=f"K&A password reset code for {username}",
         html=(
             f"<p><b>{username}</b> ({email}) is requesting a password reset.</p>"
             f"<p>Their verification code is:</p>"
@@ -395,12 +395,37 @@ def new_job_state():
 
 def get_or_create_job_id():
     job_id = session.get("job_id")
+    is_new_job = False
     with jobs_lock:
         if not job_id or job_id not in jobs:
             job_id = str(uuid.uuid4())
             jobs[job_id] = new_job_state()
             session["job_id"] = job_id
+            is_new_job = True
         cleanup_old_jobs()
+
+    # A brand-new job slot means this is either a first-ever visit, or the
+    # server restarted/redeployed since the user was last here and wiped
+    # the in-memory jobs dict. Either way, restore their last scan's
+    # qualified results from the database so the Qualified Carriers page
+    # doesn't come back empty — it should only go empty once they start a
+    # NEW scan (worker() below persists the fresh results once that
+    # finishes, replacing whatever was here before).
+    if is_new_job:
+        username = session.get("username")
+        if username:
+            persisted = db.get_latest_qualified(username)
+            if persisted:
+                with jobs_lock:
+                    st = jobs.get(job_id)
+                    if st is not None:
+                        st["results"] = persisted["results"]
+                        st["start_mc"] = persisted["start_mc"]
+                        st["end_mc"] = persisted["end_mc"]
+                        st["current"] = persisted["total_checked"] or 0
+                        st["total"] = persisted["total_checked"] or 0
+                        st["finished_time"] = time.time()
+
     return job_id
 
 
@@ -854,6 +879,13 @@ def worker(job_id, username, start_mc, end_mc):
             total_checked = st["current"]
             not_found = st["not_found_count"]
             error_count = st["error_count"]
+            results_copy = list(st["results"])
+
+    # Persist this scan's qualified results to the database (not just
+    # server memory) so they're still there for the Qualified Carriers
+    # page even after a redeploy or a free-tier sleep/wake cycle — they
+    # only get replaced the next time this user runs a new scan.
+    db.save_latest_qualified(username, results_copy, start_mc, end_mc, total_checked)
 
     db.add_usage(username, total_checked)
     db.add_history(username, {
