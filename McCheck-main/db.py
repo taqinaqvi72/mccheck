@@ -162,6 +162,14 @@ def init_db():
             updated TEXT,
             PRIMARY KEY (username, mc_number)
         )""",
+        """CREATE TABLE IF NOT EXISTS latest_qualified (
+            username TEXT PRIMARY KEY,
+            results TEXT NOT NULL,
+            start_mc INTEGER,
+            end_mc INTEGER,
+            total_checked INTEGER,
+            updated TEXT
+        )""",
     ]
 
     for stmt in table_statements:
@@ -212,10 +220,9 @@ def _seed_default_users():
         ("Demo", "demo@gmail.com", generate_password_hash("demo@123"), "demo", False),
         ("Demo", "demo2@gmail.com", generate_password_hash("demo@1234"), "demo", False),
         ("Bluetruckinllc", "Bluetruckinllc@gmail.com", generate_password_hash("admin@123"), "lifetime", False),
-        ("user1", "user1@gmail.com", generate_password_hash("user@123"), "1 Month", False),
-        ("user2", "user2@gmail.com", generate_password_hash("user@1234"), "1 Month", False),
-        ("user3", "user3@gmail.com", generate_password_hash("user@12345"), "1 Month", False),
-
+        ("user1", "user1@gmail.com", generate_password_hash("user@123"), "1_month", False),
+        ("user2", "user2@gmail.com", generate_password_hash("user@1234"), "1_month", False),
+        ("user3", "user3@gmail.com", generate_password_hash("user@12345"), "1_month", False),
         ("Taqi", "syedtaqirazanaqvishah@gmail.com", generate_password_hash("taqi@123"), "lifetime", False),
     ]
     # Each row gets its OWN try/except + commit/rollback. This is
@@ -694,5 +701,42 @@ def set_call_status(username, mc_number, status):
                    status = EXCLUDED.status,
                    updated = EXCLUDED.updated""",
             (username, str(mc_number), status, time.strftime("%Y-%m-%d %H:%M")),
+        )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Latest qualified results — persists the most recent scan's qualified
+# carrier list to the database (not just server memory), so the Qualified
+# Carriers page keeps showing it even after a redeploy, a Render free-tier
+# sleep/wake cycle, or any other server restart. It's only replaced when
+# the user runs a NEW scan from the Dashboard (see worker() in app.py,
+# which calls save_latest_qualified() once that scan finishes).
+# ---------------------------------------------------------------------------
+def get_latest_qualified(username):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM latest_qualified WHERE username = %s", (username,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["results"] = json.loads(d["results"])
+    return d
+
+
+def save_latest_qualified(username, results, start_mc, end_mc, total_checked):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO latest_qualified (username, results, start_mc, end_mc, total_checked, updated)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (username) DO UPDATE SET
+                   results = EXCLUDED.results,
+                   start_mc = EXCLUDED.start_mc,
+                   end_mc = EXCLUDED.end_mc,
+                   total_checked = EXCLUDED.total_checked,
+                   updated = EXCLUDED.updated""",
+            (username, json.dumps(results), start_mc, end_mc, total_checked, time.strftime("%Y-%m-%d %H:%M")),
         )
     conn.commit()
