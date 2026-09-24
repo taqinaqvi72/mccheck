@@ -30,10 +30,21 @@ unavailable rather than showing fabricated numbers.
 
 PROXY FALLBACK: when every Webshare proxy account's bandwidth/limit is
 exhausted, the scan engine automatically switches to a no-proxy direct
-mode. In that mode requests go straight to FMCSA (rate-limited to
+mode. In that mode requests go straight to FMCSA, rate-limited to
 roughly 1000 MC / 15 min, same pace as the old pre-proxy setup), and
 if FMCSA ever errors/blocks a request the engine auto-pauses for 90
 seconds and then resumes on its own — no manual restart needed.
+
+ACCOUNT-EXHAUSTION FIX (this version): previously a SINGLE proxy
+failure (ProxyError or HTTP 407) on an account was enough to mark that
+whole Webshare account "exhausted" forever, even if it was just a
+one-off timeout/glitch. That meant a few unlucky early failures could
+mark all accounts exhausted within the first few percent of a scan and
+trigger the "fast mode exceeded" banner long before real bandwidth was
+actually used up. Now an account is only marked exhausted after
+ACCOUNT_FAIL_THRESHOLD CONSECUTIVE failures, and any successful request
+through that account resets its failure count back to 0 (see
+mark_proxy_account_exhausted / mark_proxy_account_success below).
 """
 import concurrent.futures
 import csv
@@ -173,7 +184,6 @@ PROXIES = [
     ("38.154.185.97", "6370", "nwjtmabu", "5j1948uorumx", "http"),
     ("191.96.254.138", "6185", "nwjtmabu", "5j1948uorumx", "http"),
 
-    
     # giftshopacc
     ("31.59.20.176", "6754", "qzvtstau", "r8kz3itfpupb", "http"),
     ("45.38.107.97", "6014", "qzvtstau", "r8kz3itfpupb", "http"),
@@ -192,6 +202,14 @@ _proxy_lock = threading.Lock()
 _ALL_PROXY_ACCOUNTS = set(p[2] for p in PROXIES)
 _exhausted_accounts = set()
 _exhausted_lock = threading.Lock()
+
+# NEW: per-account CONSECUTIVE failure tracking. A single ProxyError/407 no
+# longer exhausts an account outright — only ACCOUNT_FAIL_THRESHOLD failures
+# in a row do. A successful request through the account resets its count.
+_account_fail_counts = {}
+_account_fail_lock = threading.Lock()
+ACCOUNT_FAIL_THRESHOLD = 5  # consecutive failures required before exhausting an account
+
 # Set once every account above has been marked exhausted. From that point
 # on, fetch_mc_page() stops using proxies entirely and switches to the
 # rate-limited, auto-pausing direct mode.
@@ -219,11 +237,22 @@ _no_proxy_last_request_time = [0.0]
 
 
 def mark_proxy_account_exhausted(user):
-    """Called when a given Webshare account's proxies start failing
-    (bandwidth/limit exceeded). Once every account has been marked this
-    way, flips the whole app into no-proxy fallback mode."""
+    """Called when a given Webshare account's proxies fail (ProxyError or
+    407). Only marks the account exhausted after ACCOUNT_FAIL_THRESHOLD
+    CONSECUTIVE failures — a single timeout/glitch should not permanently
+    kill an account that still has plenty of bandwidth left. Once every
+    account has been exhausted this way, flips the whole app into no-proxy
+    fallback mode."""
     if user is None:
         return
+
+    with _account_fail_lock:
+        _account_fail_counts[user] = _account_fail_counts.get(user, 0) + 1
+        fail_count = _account_fail_counts[user]
+
+    if fail_count < ACCOUNT_FAIL_THRESHOLD:
+        return  # not exhausted yet — just a blip, keep using this account
+
     with _exhausted_lock:
         if user in _exhausted_accounts:
             return
@@ -236,18 +265,15 @@ def mark_proxy_account_exhausted(user):
               f"{NO_PROXY_ERROR_PAUSE_SECONDS}s auto-pause on error).")
 
 
-def wait_for_no_proxy_slot():
-    """Blocks (if needed) so that, across all scan threads combined, direct
-    requests stay at roughly NO_PROXY_RATE_LIMIT_COUNT per
-    NO_PROXY_RATE_LIMIT_WINDOW_SECONDS."""
-    with _no_proxy_pace_lock:
-        now = time.time()
-        earliest_allowed = _no_proxy_last_request_time[0] + NO_PROXY_MIN_INTERVAL
-        wait = earliest_allowed - now
-        if wait > 0:
-            time.sleep(wait)
-            now = time.time()
-        _no_proxy_last_request_time[0] = now
+def mark_proxy_account_success(user):
+    """Call this right after a request succeeds through this account.
+    Resets its consecutive-failure counter — a couple of earlier blips
+    shouldn't count against it forever once it's clearly working again."""
+    if user is None:
+        return
+    with _account_fail_lock:
+        if _account_fail_counts.get(user):
+            _account_fail_counts[user] = 0
 
 
 def get_next_proxy():
@@ -484,9 +510,11 @@ def fetch_mc_page(mc_number, session_obj):
       this is a technical failure, NOT the same as a genuine not-found.
 
     Proxy mode: rotates through non-exhausted Webshare accounts. If a
-    proxy itself fails (account out of bandwidth), that account is marked
-    exhausted and the request is retried on another account/proxy right
-    away, transparently.
+    proxy itself fails (account out of bandwidth), that failure is counted
+    against the account (see mark_proxy_account_exhausted) and the request
+    is retried right away on another account/proxy, transparently. An
+    account only gets marked exhausted after several CONSECUTIVE failures —
+    a single blip won't take it out, and a success resets its counter.
 
     No-proxy fallback mode (once every account is exhausted): requests go
     straight to FMCSA, paced to ~1000 MC / 15 min. Any error (timeout,
@@ -519,9 +547,17 @@ def fetch_mc_page(mc_number, session_obj):
             try:
                 r = session_obj.get(BASE_URL, params=params, headers=HEADERS, timeout=FETCH_TIMEOUT)
                 r.raise_for_status()
+                # Request went through cleanly — reset this account's
+                # consecutive-failure count so a couple of earlier blips
+                # don't linger against it.
+                if not no_proxy:
+                    mark_proxy_account_success(account_user)
             except requests.exceptions.ProxyError:
-                # The proxy itself refused/failed — almost always means
-                # that account's bandwidth/limit is used up.
+                # The proxy itself refused/failed — could mean that
+                # account's bandwidth/limit is used up, or could just be a
+                # transient blip. mark_proxy_account_exhausted() only
+                # actually exhausts the account after several of these in
+                # a row.
                 if not no_proxy:
                     mark_proxy_account_exhausted(account_user)
                     continue  # immediately retry — next account, or no-proxy mode
