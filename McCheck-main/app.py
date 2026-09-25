@@ -191,6 +191,15 @@ PROXIES = [
     ("198.23.243.226", "6361", "qzvtstau", "r8kz3itfpupb", "http"),
     ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
     ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
+
+ # haidi 1
+    ("31.59.20.176", "6754", "vwylbzpm", "453wveihxrck", "http"),
+    ("45.38.107.97", "6014", "vwylbzpm", "453wveihxrck", "http"),
+    ("198.23.243.226", "6361", "vwylbzpm", "453wveihxrck", "http"),
+    ("38.154.185.97", "6370", "vwylbzpm", "453wveihxrck", "http"),
+    ("191.96.254.138", "6185", "vwylbzpm", "453wveihxrck", "http"),
+    ("198.46.161.42", "5092", "vwylbzpm", "453wveihxrck", "http"),
+    
 ]
 _proxy_index = [0]
 _proxy_lock = threading.Lock()
