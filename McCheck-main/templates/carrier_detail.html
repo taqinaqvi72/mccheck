@@ -2,118 +2,32 @@
 {% block title %}Carrier Details{% endblock %}
 {% block extra_style %}
 <style>
-  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 13px; margin-bottom: 14px; transition: .15s ease; }
-  .back-link:hover { color: var(--text); }
-
-  /* ---------- HEADER ---------- */
-  .carrier-header-card {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    padding: 20px 22px;
-    margin-bottom: 20px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 15px;
-  }
-  .carrier-header-left { display: flex; align-items: flex-start; gap: 14px; }
-  .carrier-avatar {
-    width: 52px; height: 52px; flex-shrink: 0;
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--panel-2-solid);
-    border: 1px solid var(--border);
-    font-size: 20px; font-weight: 700;
-    color: var(--muted);
-  }
-  .carrier-header-title { font-size: 21px; font-weight: 800; letter-spacing: -.4px; margin: 0 0 4px; color: var(--text); }
-  .carrier-header-sub { font-size: 13px; color: var(--muted); font-family: var(--mono); margin: 0 0 8px; }
-  .carrier-header-badges { display: flex; flex-wrap: wrap; gap: 6px; }
-  .carrier-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-
-  .fav-star-lg {
-    width: 38px; height: 38px;
-    display: inline-flex; align-items: center; justify-content: center;
-    border-radius: 9px; cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--panel);
-    color: var(--muted);
-    font-size: 18px;
-    transition: .16s ease;
-  }
-  .fav-star-lg:hover { border-color: var(--general); color: var(--general); }
-  .fav-star-lg.active { color: var(--general); border-color: var(--general); background: rgba(12,174,107,.08); }
-
-  /* ---------- BADGES (shared w/ qualified list) ---------- */
-  .badge { display: inline-flex; align-items: center; justify-content: center; min-height: 23px; padding: 3px 9px; border-radius: 6px; font-size: 10.5px; font-weight: 600; white-space: nowrap; }
-  .badge.fresh   { color: #087f55; background: rgba(12,174,107,.10); border: 1px solid rgba(12,174,107,.18); }
-  .badge.reefer  { color: #1769d1; background: rgba(35,110,225,.10); border: 1px solid rgba(35,110,225,.18); }
-  .badge.general { color: #d85a00; background: rgba(255,103,0,.10); border: 1px solid rgba(255,103,0,.18); }
-  .badge.neutral { color: var(--muted); background: var(--panel-2-solid); border: 1px solid var(--border); }
-  .badge.authorized { color: #087f55; background: rgba(12,174,107,.10); border: 1px solid rgba(12,174,107,.18); }
-  .badge.not-authorized { color: #dc2626; background: rgba(220,38,38,.10); border: 1px solid rgba(220,38,38,.18); }
-
-  /* ---------- GRID / CARDS ---------- */
-  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   @media (max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }
-
-  .card-title { font-size: 13px; font-weight: 700; color: var(--text); }
-  .card-subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
-
-  .kv-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .kv-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .kv-row:last-child { border-bottom: none; }
   .kv-row .k { color: var(--muted); }
   .kv-row .v { font-weight: 600; text-align: right; }
-  .kv-row .v.mono { font-family: var(--mono); font-size: 12px; }
-
-  .unavailable-note {
-    background: var(--panel-2-solid);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 11.5px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    margin-top: 10px;
-    line-height: 1.5;
-  }
-
+  .unavailable-note { background: var(--general-bg); border: 1px solid var(--general); color: var(--general); font-size: 11.5px; padding: 10px 12px; border-radius: 8px; margin-top: 10px; }
   .doc-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--panel-2-solid); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
-  .doc-row:last-of-type { margin-bottom: 0; }
   .doc-row .name { font-size: 13px; font-weight: 600; }
   .doc-actions button { font-size: 11px; padding: 5px 10px; margin-left: 4px; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 13px; margin-bottom: 14px; }
 
-  /* ---------- EQUIPMENT ---------- */
-  .equipment-card { margin-top: 20px; }
-  .equipment-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
-  .equipment-count { font-size: 11.5px; color: var(--muted); font-weight: 600; }
-
-  .equipment-state { padding: 26px 12px; text-align: center; color: var(--muted); font-size: 12.5px; }
-  .equipment-state .spinner {
-    width: 22px; height: 22px; margin: 0 auto 10px;
-    border: 2.5px solid var(--border);
-    border-top-color: var(--accent-blue, #2d69e6);
-    border-radius: 50%;
-    animation: eq-spin .7s linear infinite;
+  /* ---------- EQUIPMENT (trucks) ---------- */
+  .equip-table-wrap { width: 100%; overflow-x: auto; margin-top: 4px; }
+  .equip-table { width: 100%; border-collapse: collapse; }
+  .equip-table thead th {
+    padding: 8px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .3px;
+    color: var(--muted); text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
   }
-  @keyframes eq-spin { to { transform: rotate(360deg); } }
-
-  .equipment-table-wrap { width: 100%; overflow-x: auto; margin-top: 10px; }
-  .equipment-table { width: 100%; border-collapse: collapse; }
-  .equipment-table thead th {
-    height: 36px; padding: 0 12px;
-    background: var(--panel-2-solid);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    color: var(--muted); font-size: 10px; font-weight: 700;
-    text-align: left; text-transform: uppercase; letter-spacing: .35px; white-space: nowrap;
+  .equip-table tbody td {
+    padding: 10px; font-size: 12px; border-bottom: 1px solid var(--border); color: var(--text);
   }
-  .equipment-table tbody td { padding: 11px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text); }
-  .equipment-table tbody tr:last-child td { border-bottom: none; }
-  .equipment-table td.vin { font-family: var(--mono); font-size: 11.5px; }
-
-  .equipment-refresh-btn { font-size: 11px; padding: 6px 11px; }
+  .equip-table tbody tr:last-child td { border-bottom: none; }
+  .equip-vin { font-family: var(--mono); font-size: 11px; }
+  .equip-loading, .equip-empty { padding: 14px 2px; color: var(--muted); font-size: 12.5px; }
+  .equip-count { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 6px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -122,36 +36,23 @@
 {% if not carrier %}
 <div class="card"><div class="empty-state">No data found for MC-{{ mc_number }}. It may not be in your current scan results or saved list.</div></div>
 {% else %}
-
-<div class="carrier-header-card">
-  <div class="carrier-header-left">
-    <div class="carrier-avatar">{{ (carrier.legal_name or "MC")[0]|upper }}</div>
-    <div>
-      <h1 class="carrier-header-title">{{ carrier.legal_name or "MC-" + mc_number }}</h1>
-      <p class="carrier-header-sub">MC-{{ mc_number }}{% if carrier.usdot_number %} · USDOT-{{ carrier.usdot_number }}{% endif %}{% if carrier.city or carrier.state %} · {{ carrier.city }}{% if carrier.city and carrier.state %}, {% endif %}{{ carrier.state }}{% endif %}</p>
-      <div class="carrier-header-badges" id="headerBadges"></div>
-    </div>
-  </div>
-
-  <div class="carrier-header-actions">
-    <span class="fav-star-lg" id="favStar" onclick="saveThis()" title="Save carrier">☆</span>
-    <button class="btn btn-secondary" onclick="copyPhone()">Copy Phone</button>
-    <button class="btn btn-secondary" onclick="window.location.href='/notes?mc={{ mc_number }}'">Add Note</button>
-  </div>
+<div class="page-header">
+  <h1>{{ carrier.legal_name or "MC-" + mc_number }}</h1>
+  <p>MC-{{ mc_number }} · Carrier Overview</p>
 </div>
 
 <div class="detail-grid">
   <div class="card">
     <div class="card-title" style="margin-bottom:6px;">Carrier Overview</div>
-    <div class="kv-row"><span class="k">MC Number</span><span class="v mono">MC-{{ mc_number }}</span></div>
-    <div class="kv-row"><span class="k">USDOT Number</span><span class="v mono">{{ carrier.usdot_number or "—" }}</span></div>
+    <div class="kv-row"><span class="k">MC Number</span><span class="v">MC-{{ mc_number }}</span></div>
+    <div class="kv-row"><span class="k">USDOT Number</span><span class="v">{{ carrier.usdot_number or "—" }}</span></div>
     <div class="kv-row"><span class="k">Legal Name</span><span class="v">{{ carrier.legal_name or "—" }}</span></div>
     <div class="kv-row"><span class="k">DBA</span><span class="v">{{ carrier.dba_name or "—" }}</span></div>
     <div class="kv-row"><span class="k">State</span><span class="v">{{ carrier.state or "—" }}</span></div>
-    <div class="kv-row"><span class="k">Phone</span><span class="v mono">{{ carrier.phone or "—" }}</span></div>
+    <div class="kv-row"><span class="k">Phone</span><span class="v">{{ carrier.phone or "—" }}</span></div>
     <div class="kv-row"><span class="k">Address</span><span class="v">{{ carrier.address_line1 or "—" }}{% if carrier.city %}, {{ carrier.city }}{% endif %}</span></div>
     <div class="kv-row"><span class="k">Power Units</span><span class="v">{{ carrier.power_units if carrier.power_units is not none else "—" }}</span></div>
-    <div class="kv-row"><span class="k">Cargo</span><span class="v" id="cargoBadgeCell">{{ carrier.cargo_carried or "—" }}</span></div>
+    <div class="kv-row"><span class="k">Cargo</span><span class="v">{{ carrier.cargo_carried or "—" }}</span></div>
     <div class="kv-row"><span class="k">Carrier Type</span><span class="v">{{ carrier.entity_type or "—" }}</span></div>
     <div class="kv-row"><span class="k">Operating Status</span><span class="v">{{ carrier.authority_status or "—" }}</span></div>
   </div>
@@ -164,7 +65,25 @@
       <div class="unavailable-note">Authority sub-type breakdown isn't provided by FMCSA SAFER's free lookup — only the overall status shown above is available.</div>
     </div>
 
-    <div class="card" style="margin-top:20px;">
+    <!-- KNOWN EQUIPMENT (TRUCKS) -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:6px;">
+        Known Equipment (Trucks)
+        <span class="equip-count" id="equipCount"></span>
+      </div>
+
+      <div id="equipWrap">
+        <div class="equip-loading" id="equipLoading">Loading known equipment…</div>
+      </div>
+
+      <div class="unavailable-note">
+        Pulled from public FMCSA roadside-inspection records — only shows
+        vehicles that have actually been inspected under this carrier's
+        USDOT number, not necessarily its full current fleet.
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-title" style="margin-bottom:6px;">Insurance</div>
       <div class="kv-row"><span class="k">Auto Liability</span><span class="v">—</span></div>
       <div class="kv-row"><span class="k">General Liability</span><span class="v">—</span></div>
@@ -173,7 +92,7 @@
       <div class="unavailable-note">Insurance figures aren't available from FMCSA SAFER's free data — this requires FMCSA's paid Licensing &amp; Insurance dataset, not currently connected.</div>
     </div>
 
-    <div class="card" style="margin-top:20px;">
+    <div class="card">
       <div class="card-title" style="margin-bottom:10px;">Documents</div>
       <div class="doc-row"><span class="name">Authority Letter</span><div class="doc-actions"><button class="btn btn-secondary" disabled>View</button><button class="btn btn-secondary" disabled>Upload</button></div></div>
       <div class="doc-row"><span class="name">W9</span><div class="doc-actions"><button class="btn btn-secondary" disabled>View</button><button class="btn btn-secondary" disabled>Upload</button></div></div>
@@ -183,180 +102,101 @@
   </div>
 </div>
 
-<!-- ===== EQUIPMENT (VIN / MAKE / PLATE) ===== -->
-<div class="card equipment-card">
-  <div class="equipment-head">
-    <div>
-      <div class="card-title">Known Equipment</div>
-      <div class="card-subtitle">Vehicles seen under this carrier's USDOT in public FMCSA roadside inspections</div>
-    </div>
-    <div style="display:flex; align-items:center; gap:8px;">
-      <span class="equipment-count" id="equipmentCount"></span>
-      <button class="btn btn-secondary equipment-refresh-btn" onclick="loadEquipment()">Refresh</button>
-    </div>
-  </div>
-  <div id="equipmentBody">
-    <div class="equipment-state"><div class="spinner"></div>Loading equipment…</div>
-  </div>
+<div class="card">
+  <button class="btn btn-primary" onclick="saveThis()">Save Carrier</button>
+  <button class="btn btn-secondary" onclick="copyPhone()">Copy Phone</button>
+  <button class="btn btn-secondary" onclick="window.location.href='/notes?mc={{ mc_number }}'">Add Note</button>
 </div>
-
 {% endif %}
 {% endblock %}
 {% block extra_script %}
 <script>
 const carrierData = {{ carrier|tojson if carrier else 'null' }};
-const mcNumber = {{ mc_number|tojson }};
-let isSaved = false;
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
-
-function cargoBadges(cargoStr) {
-  if (!cargoStr) return '<span class="badge neutral">—</span>';
-  const items = cargoStr.split(',').map(s => s.trim()).filter(Boolean);
-  const colorFor = (label) => {
-    const l = label.toLowerCase();
-    if (l.includes('refrigerated') || l.includes('frozen') || l.includes('temperature') || l.includes('reefer')) return 'reefer';
-    if (l.includes('fresh') || l.includes('perishable')) return 'fresh';
-    if (l.includes('general')) return 'general';
-    return 'neutral';
-  };
-  return items.map(item => `<span class="badge ${colorFor(item)}" style="margin:2px 4px 2px 0;">${escapeHtml(item)}</span>`).join(' ');
-}
-
-function renderHeaderBadges() {
-  const wrap = document.getElementById('headerBadges');
-  if (!wrap || !carrierData) return;
-  let html = '';
-  const auth = (carrierData.authority_status || '').toUpperCase();
-  if (auth.includes('NOT AUTHORIZED')) {
-    html += `<span class="badge not-authorized">${escapeHtml(carrierData.authority_status)}</span>`;
-  } else if (auth) {
-    html += `<span class="badge authorized">${escapeHtml(carrierData.authority_status)}</span>`;
-  }
-  if (carrierData.entity_type) {
-    html += `<span class="badge neutral">${escapeHtml(carrierData.entity_type)}</span>`;
-  }
-  if (typeof carrierData.power_units === 'number') {
-    html += `<span class="badge neutral">${carrierData.power_units} PU</span>`;
-  }
-  wrap.innerHTML = html;
-}
-
-function renderCargoCell() {
-  const cell = document.getElementById('cargoBadgeCell');
-  if (cell && carrierData && carrierData.cargo_carried) {
-    cell.innerHTML = cargoBadges(carrierData.cargo_carried);
-  }
-}
-
-async function refreshSavedState() {
-  if (!carrierData) return;
-  try {
-    const res = await fetch('/api/saved', { cache: 'no-store' });
-    if (!res.ok) return;
-    const saved = await res.json();
-    isSaved = saved.some(s => String(s.mc_number) === String(mcNumber));
-    const star = document.getElementById('favStar');
-    star.textContent = isSaved ? '★' : '☆';
-    star.classList.toggle('active', isSaved);
-    star.title = isSaved ? 'Remove from saved' : 'Save carrier';
-  } catch (error) {
-    console.error('Failed to load saved state:', error);
-  }
-}
-
 async function saveThis() {
   if (!carrierData) return;
-  try {
-    if (isSaved) {
-      const res = await fetch(`/api/saved/${mcNumber}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to remove');
-      isSaved = false;
-      showToast(`MC-${mcNumber} removed from saved`);
-    } else {
-      const res = await fetch('/api/saved', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(carrierData) });
-      if (!res.ok) throw new Error('Failed to save');
-      isSaved = true;
-      showToast(`MC-${mcNumber} saved successfully.`);
-    }
-    const star = document.getElementById('favStar');
-    star.textContent = isSaved ? '★' : '☆';
-    star.classList.toggle('active', isSaved);
-    star.title = isSaved ? 'Remove from saved' : 'Save carrier';
-  } catch (error) {
-    console.error(error);
-    showToast('Unable to update saved carrier');
-  }
+  await fetch('/api/saved', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(carrierData) });
+  showToast('MC-{{ mc_number }} saved successfully.');
 }
-
 function copyPhone() {
   const phone = carrierData ? carrierData.phone : '';
   if (!phone) { showToast('No phone number available'); return; }
-  navigator.clipboard.writeText(phone).then(() => showToast('Phone number copied')).catch(() => showToast('Unable to copy phone number'));
+  navigator.clipboard.writeText(phone).then(() => showToast('Phone number copied'));
 }
 
-/* ===== EQUIPMENT ===== */
+/* =========================================================
+   KNOWN EQUIPMENT (TRUCKS) — /api/equipment/<mc_number>
+   ========================================================= */
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 async function loadEquipment() {
-  const body = document.getElementById('equipmentBody');
-  const countEl = document.getElementById('equipmentCount');
-  body.innerHTML = `<div class="equipment-state"><div class="spinner"></div>Loading equipment…</div>`;
-  countEl.textContent = '';
+  const wrap = document.getElementById('equipWrap');
+  const countEl = document.getElementById('equipCount');
 
   try {
-    const res = await fetch(`/api/equipment/${encodeURIComponent(mcNumber)}`, { cache: 'no-store' });
+    const res = await fetch('/api/equipment/{{ mc_number }}', { cache: 'no-store' });
     const data = await res.json();
 
     if (!res.ok) {
-      body.innerHTML = `<div class="equipment-state">${escapeHtml(data.error || 'No equipment data available for this carrier yet.')}</div>`;
+      wrap.innerHTML = `<div class="equip-empty">${escapeHtml(data.error || 'Unable to load equipment for this carrier.')}</div>`;
       return;
     }
 
     const vehicles = data.vehicles || [];
-    countEl.textContent = vehicles.length ? `${vehicles.length} vehicle${vehicles.length === 1 ? '' : 's'}` : '';
+    countEl.textContent = vehicles.length ? `(${vehicles.length})` : '';
 
     if (!vehicles.length) {
-      body.innerHTML = `<div class="equipment-state">No roadside-inspection records found for USDOT-${escapeHtml(data.usdot_number || '')}.</div>`;
+      wrap.innerHTML = `<div class="equip-empty">No inspected vehicles found on file for USDOT ${escapeHtml(data.usdot_number || '')}.</div>`;
       return;
     }
 
     let html = `
-      <div class="equipment-table-wrap">
-        <table class="equipment-table">
+      <div class="equip-table-wrap">
+        <table class="equip-table">
           <thead>
-            <tr><th>VIN</th><th>Make</th><th>Plate</th><th>Plate State</th></tr>
+            <tr>
+              <th>VIN</th>
+              <th>Make</th>
+              <th>Plate</th>
+              <th>Plate State</th>
+            </tr>
           </thead>
           <tbody>
     `;
+
     for (const v of vehicles) {
       html += `
         <tr>
-          <td class="vin">${escapeHtml(v.vin || '—')}</td>
+          <td class="equip-vin">${escapeHtml(v.vin || '—')}</td>
           <td>${escapeHtml(v.make || '—')}</td>
-          <td class="vin">${escapeHtml(v.plate || '—')}</td>
+          <td>${escapeHtml(v.plate || '—')}</td>
           <td>${escapeHtml(v.plate_state || '—')}</td>
         </tr>
       `;
     }
-    html += `</tbody></table></div>`;
-    if (data.note) {
-      html += `<div class="unavailable-note">${escapeHtml(data.note)}</div>`;
-    }
-    body.innerHTML = html;
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    wrap.innerHTML = html;
 
   } catch (error) {
     console.error('Equipment load error:', error);
-    body.innerHTML = `<div class="equipment-state">Unable to load equipment data. Try refreshing.</div>`;
+    wrap.innerHTML = `<div class="equip-empty">Unable to load equipment right now — try refreshing.</div>`;
   }
 }
 
 if (carrierData) {
-  renderHeaderBadges();
-  renderCargoCell();
-  refreshSavedState();
   loadEquipment();
 }
 </script>
