@@ -45,14 +45,6 @@ actually used up. Now an account is only marked exhausted after
 ACCOUNT_FAIL_THRESHOLD CONSECUTIVE failures, and any successful request
 through that account resets its failure count back to 0 (see
 mark_proxy_account_exhausted / mark_proxy_account_success below).
-
-TRUCK / EQUIPMENT LOOKUP (this version): added a carrier "known
-equipment" lookup (fetch_known_equipment / /api/equipment/<mc_number>)
-that pulls VIN/make/plate data for a carrier's trucks from FMCSA's
-public roadside-inspection Socrata datasets on data.transportation.gov.
-This is a completely separate, official REST API — NOT the SAFER
-website — so none of the proxy/rate-limit machinery above applies to
-it. See the "Truck / Equipment lookup" section below for details.
 """
 import concurrent.futures
 import csv
@@ -305,141 +297,6 @@ def get_next_proxy():
         _proxy_index[0] += 1
     proxy_url = f"{scheme}://{user}:{pwd}@{host}:{port}"
     return {"http": proxy_url, "https": proxy_url}, user
-
-
-# ---------------------------------------------------------------------------
-# Truck / Equipment lookup — FMCSA public roadside-inspection data
-# (data.transportation.gov, Socrata/SODA API)
-# ---------------------------------------------------------------------------
-# This is a completely different data source from SAFER above:
-#   - SAFER (safer.fmcsa.dot.gov) is a website that blocks scraping by IP,
-#     which is why the proxy pool + rate limiting + no-proxy fallback above
-#     exist.
-#   - data.transportation.gov is FMCSA's OFFICIAL public REST API, meant for
-#     bulk programmatic access. It throttles by "app token", not by IP, so
-#     NONE of the proxy machinery above is needed or used here.
-#
-# Get a free app token at https://data.transportation.gov/profile/edit
-# (Developer Settings -> Create New App Token) and set it as the
-# SOCRATA_APP_TOKEN environment variable for a much higher (practically
-# unthrottled) rate limit. Works without one too, just shared-pool
-# throttled (~a few hundred requests/hour from this server's IP).
-#
-# How the lookup works:
-#   1. "Vehicle Inspection File" (dataset fx4q-ay7w) — one row per roadside
-#      inspection, has dot_number + inspection_id (+ date/state/carrier).
-#   2. "Inspections Per Unit" (dataset wt8s-2hbx) — one row per vehicle
-#      inspected, has inspection_id + VIN/make/plate/plate_state/type.
-#   Join: dot_number -> inspection_id (step 1) -> VIN etc (step 2).
-#
-# IMPORTANT CAVEAT: this only surfaces vehicles that have actually been
-# roadside-inspected at some point — NOT a carrier's full/current fleet.
-# Same limitation every commercial "carrier equipment lookup" tool
-# (Carrier411, LoadWrap, etc.) has, since they're built on this same
-# public data.
-SOCRATA_APP_TOKEN = os.environ.get("SOCRATA_APP_TOKEN")
-SOCRATA_BASE = "https://data.transportation.gov/resource"
-INSPECTIONS_DATASET = "fx4q-ay7w"            # Vehicle Inspection File
-INSPECTIONS_PER_UNIT_DATASET = "wt8s-2hbx"   # Inspections Per Unit
-SOCRATA_TIMEOUT = 20
-SOCRATA_MAX_INSPECTIONS = 500  # most recent inspections considered per carrier
-SOCRATA_CHUNK_SIZE = 200       # inspection_ids per "in (...)" query, keeps URLs sane
-
-# VIN values in the raw data that are placeholders/junk rather than a real
-# VIN (confirmed present in the dataset — see column value samples). Skipped
-# so the equipment list doesn't fill up with garbage.
-_BAD_VIN_VALUES = {
-    "", "UNKNOWN", "UNK", "NONE", "NA", "N/A", "0", "NO VIN",
-    "00000000000000000", "11111111111111111", "99999999999999999",
-    "10000000000000000", "UNKNOWN0000000000", "XXXXXXXXXXXXXXXXX",
-}
-
-# Simple in-memory cache: a carrier's known-equipment list barely changes
-# hour to hour, and this is a read against an 8M+ row public dataset, so
-# there's no reason to re-hit it on every page view.
-_equipment_cache = {}
-_equipment_cache_lock = threading.Lock()
-EQUIPMENT_CACHE_TTL_SECONDS = 24 * 60 * 60
-
-
-def _socrata_get(dataset_id, params):
-    headers = {}
-    if SOCRATA_APP_TOKEN:
-        headers["X-App-Token"] = SOCRATA_APP_TOKEN
-    url = f"{SOCRATA_BASE}/{dataset_id}.json"
-    r = requests.get(url, params=params, headers=headers, timeout=SOCRATA_TIMEOUT)
-    r.raise_for_status()
-    return r.json()
-
-
-def fetch_known_equipment(dot_number):
-    """Returns a list of unique vehicles {vin, make, plate, plate_state,
-    unit_type_id} this carrier's USDOT number has shown up under in FMCSA
-    roadside-inspection records. Returns [] on bad input or any API error
-    (never raises — this is a "nice to have" enrichment, not core scan
-    functionality, so a hiccup here shouldn't break the carrier page)."""
-    dot_number = re.sub(r"\D", "", str(dot_number or ""))
-    if not dot_number:
-        return []
-
-    with _equipment_cache_lock:
-        cached = _equipment_cache.get(dot_number)
-        if cached and (time.time() - cached["fetched_at"]) < EQUIPMENT_CACHE_TTL_SECONDS:
-            return cached["vehicles"]
-
-    try:
-        inspections = _socrata_get(
-            INSPECTIONS_DATASET,
-            {
-                "$select": "inspection_id",
-                "$where": f"dot_number={int(dot_number)}",
-                "$order": "insp_date DESC",
-                "$limit": SOCRATA_MAX_INSPECTIONS,
-            },
-        )
-    except (requests.RequestException, ValueError):
-        return []
-
-    inspection_ids = [row["inspection_id"] for row in inspections if row.get("inspection_id")]
-    if not inspection_ids:
-        with _equipment_cache_lock:
-            _equipment_cache[dot_number] = {"vehicles": [], "fetched_at": time.time()}
-        return []
-
-    vehicles_by_vin = {}
-    for i in range(0, len(inspection_ids), SOCRATA_CHUNK_SIZE):
-        chunk = inspection_ids[i:i + SOCRATA_CHUNK_SIZE]
-        id_list = ",".join(str(x) for x in chunk)
-        try:
-            units = _socrata_get(
-                INSPECTIONS_PER_UNIT_DATASET,
-                {
-                    "$select": "insp_unit_vehicle_id_number,insp_unit_make,"
-                               "insp_unit_license,insp_unit_license_state,insp_unit_type_id",
-                    "$where": f"inspection_id in ({id_list})",
-                    "$limit": 10000,
-                },
-            )
-        except (requests.RequestException, ValueError):
-            continue
-
-        for u in units:
-            vin = (u.get("insp_unit_vehicle_id_number") or "").strip().upper()
-            if vin in _BAD_VIN_VALUES or len(vin) < 5:
-                continue
-            if vin not in vehicles_by_vin:
-                vehicles_by_vin[vin] = {
-                    "vin": vin,
-                    "make": (u.get("insp_unit_make") or "").strip(),
-                    "plate": (u.get("insp_unit_license") or "").strip(),
-                    "plate_state": (u.get("insp_unit_license_state") or "").strip(),
-                    "unit_type_id": (u.get("insp_unit_type_id") or "").strip(),
-                }
-
-    vehicles = list(vehicles_by_vin.values())
-    with _equipment_cache_lock:
-        _equipment_cache[dot_number] = {"vehicles": vehicles, "fetched_at": time.time()}
-    return vehicles
 
 
 BASE_URL = "https://safer.fmcsa.dot.gov/query.asp"
@@ -821,13 +678,6 @@ def parse_carrier(html, mc_number):
     city, state_abbr = parse_city_state(text)
     address_line1 = parse_address_line1(text)
 
-    # USDOT Number — needed (in addition to the MC number) to look up a
-    # carrier's known equipment/VINs via fetch_known_equipment(), since the
-    # FMCSA inspection datasets are keyed by USDOT number, not MC number.
-    usdot_raw = get_field(text, "USDOT Number:")
-    usdot_match = re.search(r"\d+", usdot_raw)
-    usdot_number = usdot_match.group() if usdot_match else ""
-
     power_units = None
     m = re.search(r"\d+", power_units_raw)
     if m:
@@ -837,7 +687,6 @@ def parse_carrier(html, mc_number):
 
     return {
         "mc_number": mc_number,
-        "usdot_number": usdot_number,
         "entity_type": entity_type,
         "authority_status": authority_status,
         "legal_name": legal_name,
@@ -893,7 +742,7 @@ def process_one(mc, session_obj, prefs):
 
     is_genuine_not_found = (html == "__NOT_FOUND__")
     return {
-        "mc_number": mc, "usdot_number": "", "entity_type": "", "authority_status": "",
+        "mc_number": mc, "entity_type": "", "authority_status": "",
         "legal_name": "", "dba_name": "", "phone": "",
         "power_units": None, "cargo_carried": "", "cargo_categories": [],
         "city": "", "state": "", "address_line1": "",
@@ -904,7 +753,7 @@ def process_one(mc, session_obj, prefs):
     }
 
 
-RESULT_FIELDS = ["mc_number", "usdot_number", "entity_type", "authority_status", "legal_name",
+RESULT_FIELDS = ["mc_number", "entity_type", "authority_status", "legal_name",
                   "dba_name", "phone", "power_units", "cargo_carried",
                   "cargo_categories", "city", "state", "address_line1"]
 
@@ -991,7 +840,7 @@ def worker(job_id, username, start_mc, end_mc):
                         backoff = RATE_LIMIT_BACKOFF_BASE
                         backoff_cycles_on_this_mc = 0
                         entry = {
-                            "mc_number": mc, "usdot_number": "", "entity_type": "", "authority_status": "",
+                            "mc_number": mc, "entity_type": "", "authority_status": "",
                             "legal_name": "", "dba_name": "", "phone": "",
                             "power_units": None, "cargo_carried": "", "cargo_categories": [],
                             "city": "", "state": "", "address_line1": "",
@@ -1018,7 +867,7 @@ def worker(job_id, username, start_mc, end_mc):
                         continue  # retry same MC
                 else:
                     entry = {
-                        "mc_number": mc, "usdot_number": "", "entity_type": "", "authority_status": "",
+                        "mc_number": mc, "entity_type": "", "authority_status": "",
                         "legal_name": "", "dba_name": "", "phone": "",
                         "power_units": None, "cargo_carried": "", "cargo_categories": [],
                         "city": "", "state": "", "address_line1": "",
@@ -1032,7 +881,7 @@ def worker(job_id, username, start_mc, end_mc):
 
                 if html == "__NOT_FOUND__":
                     entry = {
-                        "mc_number": mc, "usdot_number": "", "entity_type": "", "authority_status": "",
+                        "mc_number": mc, "entity_type": "", "authority_status": "",
                         "legal_name": "", "dba_name": "", "phone": "",
                         "power_units": None, "cargo_carried": "", "cargo_categories": [],
                         "city": "", "state": "", "address_line1": "",
@@ -1565,7 +1414,7 @@ def download():
 
 def _csv_response(rows, filename):
     output = io.StringIO()
-    fieldnames = ["mc_number", "usdot_number", "entity_type", "authority_status", "legal_name",
+    fieldnames = ["mc_number", "entity_type", "authority_status", "legal_name",
                   "dba_name", "phone", "power_units", "cargo_carried", "city", "state"]
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
@@ -1805,45 +1654,6 @@ def get_errors():
             return jsonify([])
         error_entries = [e for e in st.get("log", []) if e.get("fetch_error")]
         return jsonify(error_entries)
-
-
-# ---------------------------------------------------------------------------
-# Equipment API — carrier's known trucks (VIN/make/plate) from public FMCSA
-# roadside-inspection data. See "Truck / Equipment lookup" section above.
-# ---------------------------------------------------------------------------
-@app.route("/api/equipment/<mc_number>")
-@login_required
-def get_equipment(mc_number):
-    """Looks up the carrier the same way carrier_detail() does (saved list,
-    then the current job's results) to find its usdot_number, then pulls
-    known equipment for that USDOT number from FMCSA's public inspection
-    data. Returns 404 with an empty list if we don't have a usdot_number on
-    file yet (e.g. carrier was scanned before this feature was added —
-    re-scanning that MC will pick it up)."""
-    username = session["username"]
-    carrier = db.get_saved_one(username, mc_number)
-    if not carrier:
-        job_id = session.get("job_id")
-        with jobs_lock:
-            st = jobs.get(job_id)
-            if st and st.get("owner_username") == username:
-                carrier = next((r for r in st["results"] if str(r["mc_number"]) == str(mc_number)), None)
-
-    usdot_number = (carrier or {}).get("usdot_number")
-    if not usdot_number:
-        return jsonify({
-            "error": "No USDOT number on file for this carrier yet — re-scan this MC to pick it up.",
-            "vehicles": [],
-        }), 404
-
-    vehicles = fetch_known_equipment(usdot_number)
-    return jsonify({
-        "usdot_number": usdot_number,
-        "vehicle_count": len(vehicles),
-        "vehicles": vehicles,
-        "note": "Only vehicles that have appeared in a public FMCSA roadside "
-                "inspection — not necessarily the carrier's full current fleet.",
-    })
 
 
 if __name__ == "__main__":
