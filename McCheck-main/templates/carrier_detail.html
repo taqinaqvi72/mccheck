@@ -13,21 +13,6 @@
   .doc-row .name { font-size: 13px; font-weight: 600; }
   .doc-actions button { font-size: 11px; padding: 5px 10px; margin-left: 4px; }
   .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 13px; margin-bottom: 14px; }
-
-  /* ---------- EQUIPMENT (trucks) ---------- */
-  .equip-table-wrap { width: 100%; overflow-x: auto; margin-top: 4px; }
-  .equip-table { width: 100%; border-collapse: collapse; }
-  .equip-table thead th {
-    padding: 8px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .3px;
-    color: var(--muted); text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
-  }
-  .equip-table tbody td {
-    padding: 10px; font-size: 12px; border-bottom: 1px solid var(--border); color: var(--text);
-  }
-  .equip-table tbody tr:last-child td { border-bottom: none; }
-  .equip-vin { font-family: var(--mono); font-size: 11px; }
-  .equip-loading, .equip-empty { padding: 14px 2px; color: var(--muted); font-size: 12.5px; }
-  .equip-count { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 6px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -45,7 +30,6 @@
   <div class="card">
     <div class="card-title" style="margin-bottom:6px;">Carrier Overview</div>
     <div class="kv-row"><span class="k">MC Number</span><span class="v">MC-{{ mc_number }}</span></div>
-    <div class="kv-row"><span class="k">USDOT Number</span><span class="v">{{ carrier.usdot_number or "—" }}</span></div>
     <div class="kv-row"><span class="k">Legal Name</span><span class="v">{{ carrier.legal_name or "—" }}</span></div>
     <div class="kv-row"><span class="k">DBA</span><span class="v">{{ carrier.dba_name or "—" }}</span></div>
     <div class="kv-row"><span class="k">State</span><span class="v">{{ carrier.state or "—" }}</span></div>
@@ -63,24 +47,6 @@
       <div class="kv-row"><span class="k">Authority Status</span><span class="v">{{ carrier.authority_status or "—" }}</span></div>
       <div class="kv-row"><span class="k">Common / Contract / Broker Authority</span><span class="v">—</span></div>
       <div class="unavailable-note">Authority sub-type breakdown isn't provided by FMCSA SAFER's free lookup — only the overall status shown above is available.</div>
-    </div>
-
-    <!-- KNOWN EQUIPMENT (TRUCKS) -->
-    <div class="card">
-      <div class="card-title" style="margin-bottom:6px;">
-        Known Equipment (Trucks)
-        <span class="equip-count" id="equipCount"></span>
-      </div>
-
-      <div id="equipWrap">
-        <div class="equip-loading" id="equipLoading">Loading known equipment…</div>
-      </div>
-
-      <div class="unavailable-note">
-        Pulled from public FMCSA roadside-inspection records — only shows
-        vehicles that have actually been inspected under this carrier's
-        USDOT number, not necessarily its full current fleet.
-      </div>
     </div>
 
     <div class="card">
@@ -121,83 +87,6 @@ function copyPhone() {
   const phone = carrierData ? carrierData.phone : '';
   if (!phone) { showToast('No phone number available'); return; }
   navigator.clipboard.writeText(phone).then(() => showToast('Phone number copied'));
-}
-
-/* =========================================================
-   KNOWN EQUIPMENT (TRUCKS) — /api/equipment/<mc_number>
-   ========================================================= */
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-async function loadEquipment() {
-  const wrap = document.getElementById('equipWrap');
-  const countEl = document.getElementById('equipCount');
-
-  try {
-    const res = await fetch('/api/equipment/{{ mc_number }}', { cache: 'no-store' });
-    const data = await res.json();
-
-    if (!res.ok) {
-      wrap.innerHTML = `<div class="equip-empty">${escapeHtml(data.error || 'Unable to load equipment for this carrier.')}</div>`;
-      return;
-    }
-
-    const vehicles = data.vehicles || [];
-    countEl.textContent = vehicles.length ? `(${vehicles.length})` : '';
-
-    if (!vehicles.length) {
-      wrap.innerHTML = `<div class="equip-empty">No inspected vehicles found on file for USDOT ${escapeHtml(data.usdot_number || '')}.</div>`;
-      return;
-    }
-
-    let html = `
-      <div class="equip-table-wrap">
-        <table class="equip-table">
-          <thead>
-            <tr>
-              <th>VIN</th>
-              <th>Make</th>
-              <th>Plate</th>
-              <th>Plate State</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-
-    for (const v of vehicles) {
-      html += `
-        <tr>
-          <td class="equip-vin">${escapeHtml(v.vin || '—')}</td>
-          <td>${escapeHtml(v.make || '—')}</td>
-          <td>${escapeHtml(v.plate || '—')}</td>
-          <td>${escapeHtml(v.plate_state || '—')}</td>
-        </tr>
-      `;
-    }
-
-    html += `
-          </tbody>
-        </table>
-      </div>
-    `;
-
-    wrap.innerHTML = html;
-
-  } catch (error) {
-    console.error('Equipment load error:', error);
-    wrap.innerHTML = `<div class="equip-empty">Unable to load equipment right now — try refreshing.</div>`;
-  }
-}
-
-if (carrierData) {
-  loadEquipment();
 }
 </script>
 {% endblock %}
