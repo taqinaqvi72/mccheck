@@ -2,6 +2,7 @@
 
 TWO DATA SOURCES (FMCSA froze the old one on 05/14/2026):
 
+
   1. LEGACY  "AuthHist - All With History"  (9mw4-x3tu)
      Frozen: "last refreshed on 05/14/2026 and will no longer be updated".
      Row = one authority record carrying BOTH its start
