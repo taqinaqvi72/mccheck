@@ -1,5 +1,6 @@
 """Motus Daily FMCSA Register (PDF) integration for MC Scout.
 
+
 This is the ORIGINAL approach: FMCSA's "Daily Register" publication lists
 every new operating-authority APPLICATION as it's filed -- i.e. "who
 applied today", regardless of whether authority has been granted yet.
