@@ -1,6 +1,5 @@
 """
 Mc Scout — MC Verification & Carrier Intelligence (multi-user)
-
 ------------------------------------------------------------------
 Install:  pip install flask requests beautifulsoup4 gunicorn psycopg2-binary
 Local run:      python app.py
@@ -197,30 +196,39 @@ db.init_db()
 # environment variables, and rotate them if this file has been shared.
 PROXIES = [
 
-    # API Shabi Account
-    ("31.59.20.176", "6754", "jvvxsdlp", "5xu3f2zqhart", "http"),
-    ("45.38.107.97", "6014", "jvvxsdlp", "5xu3f2zqhart", "http"),
-    ("198.23.243.226", "6361", "jvvxsdlp", "5xu3f2zqhart", "http"),
-    ("38.154.185.97", "6370", "jvvxsdlp", "5xu3f2zqhart", "http"),
-    ("191.96.254.138", "6185", "jvvxsdlp", "5xu3f2zqhart", "http"),
-    ("198.46.161.42", "5092", "jvvxsdlp", "5xu3f2zqhart", "http"),
+    # acc 1 (usa)
+    ("31.59.20.176", "6754", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("45.38.107.97", "6014", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("198.105.121.200", "6462", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("198.23.243.226", "6361", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("38.154.185.97", "6370", "olkeghlt", "an5xy7l0kjcp", "http"),
+    ("191.96.254.138", "6185", "olkeghlt", "an5xy7l0kjcp", "http"),
 
-    # mehak 1
-    ("31.59.20.176", "6754", "gtmgogwf", "lb2nvfsdbcuw", "http"),
-    ("45.38.107.97", "6014", "gtmgogwf", "lb2nvfsdbcuw", "http"),
-    ("198.23.243.226", "6361", "gtmgogwf", "lb2nvfsdbcuw", "http"),
-    ("38.154.185.97", "6370", "gtmgogwf", "lb2nvfsdbcuw", "http"),
-    ("191.96.254.138", "6185", "gtmgogwf", "lb2nvfsdbcuw", "http"),
-    ("198.46.161.42", "5092", "gtmgogwf", "lb2nvfsdbcuw", "http"),
+    # acc 2 (taqinaqvi0377)
+    ("31.59.20.176", "6754", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("45.38.107.97", "6014", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("198.105.121.200", "6462", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("198.23.243.226", "6361", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("38.154.185.97", "6370", "ktgrlvyr", "svo2ci5t400v", "http"),
+    ("191.96.254.138", "6185", "ktgrlvyr", "svo2ci5t400v", "http"),
 
-    # mehak 2
-    ("31.59.20.176", "6754", "mgmmtqbd", "9dxxbjx501ox", "http"),
-    ("45.38.107.97", "6014", "mgmmtqbd", "9dxxbjx501ox", "http"),
-    ("198.23.243.226", "6361", "mgmmtqbd", "9dxxbjx501ox", "http"),
-    ("38.154.185.97", "6370", "mgmmtqbd", "9dxxbjx501ox", "http"),
-    ("191.96.254.138", "6185", "mgmmtqbd", "9dxxbjx501ox", "http"),
-    ("198.46.161.42", "5092", "mgmmtqbd", "9dxxbjx501ox", "http"),
+    # acc 3 (taqinaqvi072)
+    ("31.59.20.176", "6754", "nwjtmabu", "5j1948uorumx", "http"),
+    ("45.38.107.97", "6014", "nwjtmabu", "5j1948uorumx", "http"),
+    ("198.105.121.200", "6462", "nwjtmabu", "5j1948uorumx", "http"),
+    ("198.23.243.226", "6361", "nwjtmabu", "5j1948uorumx", "http"),
+    ("38.154.185.97", "6370", "nwjtmabu", "5j1948uorumx", "http"),
+    ("191.96.254.138", "6185", "nwjtmabu", "5j1948uorumx", "http"),
 
+    # acc 4 (giftshopacc)
+    ("31.59.20.176", "6754", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("45.38.107.97", "6014", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("198.105.121.200", "6462", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("198.23.243.226", "6361", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
+    ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
+
+  
 ]
 _proxy_index = [0]
 _proxy_lock = threading.Lock()
