@@ -12,7 +12,135 @@
 html, body { width: 100%; min-height: 100%; }
 body { font-family: "Inter", sans-serif; background: #090b0d; color: #ffffff; overflow-x: hidden; }
 .page { position: relative; min-height: 100vh; width: 100%; overflow: hidden; background: #111; }
-.background { position: absolute; inset: 0; width: 100%; height: 100%; background-image: url("/static/truck-background.webp"); background-size: cover; background-position: center center; background-repeat: no-repeat; z-index: 0; }
+.background{
+  position:absolute; inset:-5%;
+  width:110%; height:110%;
+  background-image:url("/static/truck-background.webp");
+  background-size:cover;
+  background-position:center center;
+  background-repeat:no-repeat;
+  z-index:0;
+  transform-origin:58% 55%;
+  will-change:transform;
+  animation:cinematicCamera 10s cubic-bezier(.45,0,.55,1) infinite alternate;
+}
+.background::before{
+  content:"";
+  position:absolute; inset:0;
+  background:
+    linear-gradient(108deg, transparent 31%, rgba(255,255,255,.055) 44%, transparent 57%),
+    radial-gradient(ellipse at 63% 72%, rgba(215,238,255,.12), transparent 18%);
+  mix-blend-mode:screen;
+  opacity:.6;
+  pointer-events:none;
+  animation:bodyReflection 7s ease-in-out infinite alternate;
+}
+
+.background-ambient{
+  position:absolute; inset:-12%;
+  background:url("/static/truck-scene.png") center/cover no-repeat;
+  filter:blur(30px) brightness(.32) saturate(1.12);
+  transform:scale(1.12);
+  z-index:-1;
+  animation:ambientMove 17s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+.atmosphere{
+  position:absolute; left:-12%; top:18%; width:58%; height:62%;
+  background:
+    radial-gradient(ellipse at 32% 48%, rgba(255,153,70,.24), transparent 60%),
+    radial-gradient(ellipse at 70% 54%, rgba(210,225,235,.07), transparent 64%);
+  filter:blur(22px);
+  mix-blend-mode:screen;
+  opacity:.62;
+  z-index:2;
+  pointer-events:none;
+  animation:atmosphereDrift 11s ease-in-out infinite alternate;
+}
+.light-spill{
+  position:absolute; left:38%; top:64%; width:58%; height:32%;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(225,245,255,.18), transparent 52%),
+    linear-gradient(103deg, transparent 14%, rgba(190,225,255,.045) 49%, transparent 82%);
+  filter:blur(13px);
+  mix-blend-mode:screen;
+  z-index:2;
+  pointer-events:none;
+  transform-origin:50% 0;
+  animation:headlightSweep 4s ease-in-out infinite alternate;
+}
+.road-motion{
+  position:absolute; left:-12%; right:-12%; bottom:-4%; height:34%;
+  z-index:2;
+  pointer-events:none;
+  overflow:hidden;
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 20%,#000 75%,transparent);
+          mask-image:linear-gradient(180deg,transparent,#000 20%,#000 75%,transparent);
+}
+.road-motion::before{
+  content:"";
+  position:absolute; inset:-20%;
+  background:
+    linear-gradient(101deg, transparent 35%, rgba(255,255,255,.05) 45%, transparent 53%),
+    linear-gradient(76deg, transparent 47%, rgba(190,220,240,.04) 51%, transparent 55%);
+  filter:blur(5px);
+  transform:skewX(-8deg) scale(1.15);
+  animation:roadFlow 4.2s linear infinite;
+}
+.road-motion::after{
+  content:"";
+  position:absolute; left:39%; top:0; width:38%; height:100%;
+  background:radial-gradient(ellipse,rgba(215,238,255,.12),transparent 67%);
+  filter:blur(16px);
+  animation:roadGlow 3.4s ease-in-out infinite alternate;
+}
+.depth-haze{
+  position:absolute; left:-15%; top:52%; width:70%; height:31%;
+  background:
+    radial-gradient(ellipse at 35% 50%, rgba(255,255,255,.075), transparent 55%),
+    radial-gradient(ellipse at 72% 45%, rgba(210,225,235,.045), transparent 60%);
+  filter:blur(25px);
+  opacity:.45;
+  z-index:3;
+  pointer-events:none;
+  animation:hazeCruise 12s ease-in-out infinite alternate;
+}
+
+@keyframes cinematicCamera{
+  0%{transform:translate3d(-2.8%,.7%,0) scale(1.045) rotate(.10deg);}
+  48%{transform:translate3d(1.8%,-.5%,0) scale(1.095) rotate(-.07deg);}
+  100%{transform:translate3d(-1.4%,.35%,0) scale(1.065) rotate(.05deg);}
+}
+@keyframes ambientMove{
+  0%{transform:scale(1.10) translate3d(-1%,.5%,0);}
+  100%{transform:scale(1.16) translate3d(2%,-1%,0);}
+}
+@keyframes bodyReflection{
+  0%,35%{opacity:.25;transform:translateX(-2%);}
+  60%{opacity:.72;transform:translateX(1%);}
+  100%{opacity:.35;transform:translateX(3%);}
+}
+@keyframes atmosphereDrift{
+  0%{transform:translate3d(-2%,0,0) scale(.96);opacity:.38;}
+  100%{transform:translate3d(14%,-2%,0) scale(1.05);opacity:.76;}
+}
+@keyframes headlightSweep{
+  0%{opacity:.28;transform:translateX(-2%) scaleY(.8);}
+  100%{opacity:.72;transform:translateX(3%) scaleY(1.04);}
+}
+@keyframes roadFlow{
+  0%{transform:translate3d(-10%,4%,0) skewX(-8deg) scale(1.05,1);opacity:.15;}
+  100%{transform:translate3d(14%,-3%,0) skewX(-8deg) scale(1.25,1.15);opacity:.45;}
+}
+@keyframes roadGlow{
+  0%{opacity:.22;transform:scaleY(.72);}
+  100%{opacity:.65;transform:scaleY(1);}
+}
+@keyframes hazeCruise{
+  0%{transform:translate3d(-3%,0,0) scale(.98);opacity:.30;}
+  100%{transform:translate3d(15%,-2%,0) scale(1.05);opacity:.62;}
+}
+
 .edge-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(0,0,0,0.05) 0%, transparent 35%, transparent 72%, rgba(0,0,0,0.16) 100%); }
 .top-nav { position: absolute; top: 0; left: 0; right: 0; height: 76px; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 0 42px; background: linear-gradient(to bottom, rgba(0,0,0,0.42), transparent); }
 .brand { display: flex; align-items: center; text-decoration: none; color: white; }
@@ -23,10 +151,10 @@ body { font-family: "Inter", sans-serif; background: #090b0d; color: #ffffff; ov
 .online { display: flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 30px; background: rgba(7,10,12,0.68); border: 1px solid rgba(255,255,255,0.13); backdrop-filter: blur(10px); font-size: 8px; font-weight: 600; letter-spacing: 0.8px; color: rgba(255,255,255,0.76); }
 .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #31d59a; box-shadow: 0 0 12px rgba(49,213,154,0.9); animation: pulse 1.8s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-.main { position: relative; z-index: 5; min-height: 100vh; width: 100%; display: flex; justify-content: flex-end; align-items: center; padding: 92px 7vw 100px; }
+.main { position: relative; z-index: 5; min-height: 100vh; width: 100%; display: flex; justify-content: flex-end; align-items: center; padding: 92px 5vw 100px; }
 .login-area { width: 400px; max-width: 100%; animation: loginIn 0.85s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes loginIn { from { opacity: 0; transform: translateX(55px) scale(.97); } to { opacity: 1; transform: translateX(0) scale(1); } }
-.login-card { width: 100%; padding: 29px 30px 24px; border-radius: 17px; background: linear-gradient(145deg, rgba(17,21,23,0.94), rgba(10,13,14,0.91)); border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 28px 75px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.05); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.login-card { width: 100%; padding: 29px 30px 24px; border-radius: 17px; background: linear-gradient(145deg, rgba(17,21,23,0.91), rgba(10,13,14,0.87)); border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 28px 75px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.05); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .card-brand { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; margin-bottom: 23px; text-align: center; }
 .card-brand .brand-icon { width: 285px; height: 105px; }
 .card-brand-name { margin-top: 4px; font-size: 17px; line-height: 1.15; font-weight: 800; letter-spacing: -0.45px; color: #ffffff; }
@@ -85,14 +213,19 @@ input:focus { border-color: rgba(255,105,0,0.65); background: rgba(255,255,255,0
 .footer-link svg { width: 16px; height: 16px; }
 .footer-link:hover { color: white; }
 @media (max-width: 1050px) { .main { padding-right: 4vw; } .login-area { width: 380px; } .footer { padding: 0 3vw; } }
-@media (max-width: 800px) { .page { min-height: 100vh; background: #111; } .background { position: fixed; background-position: 57% center; } .top-nav { padding: 0 20px; height: 68px; } .online { display: none; } .main { min-height: 100vh; padding: 85px 20px 120px; justify-content: center; align-items: center; } .login-area { width: min(410px, 100%); } .login-card { padding: 25px 22px 21px; } .footer { position: relative; min-height: auto; padding: 15px 20px; flex-direction: column; justify-content: center; gap: 12px; } .footer-left { display: none; } .copyright { order: 1; } .footer-links { order: 2; } }
+@media (max-width: 800px) { .page { min-height: 100vh; background: #111; } .background { position: fixed; background-position: 57% center; animation-duration: 12s; } .top-nav { padding: 0 20px; height: 68px; } .online { display: none; } .main { min-height: 100vh; padding: 85px 20px 120px; justify-content: center; align-items: center; } .login-area { width: min(410px, 100%); } .login-card { padding: 25px 22px 21px; } .footer { position: relative; min-height: auto; padding: 15px 20px; flex-direction: column; justify-content: center; gap: 12px; } .footer-left { display: none; } .copyright { order: 1; } .footer-links { order: 2; } }
 @media (max-width: 450px) { .brand-icon { width: 155px; height: 60px; } .card-brand .brand-icon { width: 245px; height: 90px; } .card-brand-name { font-size: 15px; } .card-brand-sub { font-size: 6px; letter-spacing: 1.2px; } .title { font-size: 24px; } .login-card { padding: 23px 18px 19px; border-radius: 14px; } .footer-links { gap: 13px; } }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+@media (prefers-reduced-motion: reduce) { .background, .background-ambient, .atmosphere, .light-spill, .road-motion::before, .road-motion::after, .depth-haze, .background::before { animation:none !important; } *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
 </style>
 </head>
 <body>
 <div class="page">
 <div class="background"></div>
+<div class="background-ambient" aria-hidden="true"></div>
+<div class="atmosphere" aria-hidden="true"></div>
+<div class="light-spill" aria-hidden="true"></div>
+<div class="road-motion" aria-hidden="true"></div>
+<div class="depth-haze" aria-hidden="true"></div>
 <div class="edge-vignette"></div>
 <header class="top-nav">
 <a href="/" class="brand" aria-label="Truck Services Solutions">
