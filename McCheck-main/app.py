@@ -228,6 +228,14 @@ PROXIES = [
     ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
     ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
 
+     # acc 5 (kashaf)
+    ("31.59.20.176", "6754", "oiwepino", "agh6av5ktbpm", "http"),
+    ("45.38.107.97", "6014", "oiwepino", "agh6av5ktbpm", "http"),
+    ("198.23.243.226", "6361", "oiwepino", "agh6av5ktbpm", "http"),
+    ("38.154.185.97", "6370", "oiwepino", "agh6av5ktbpm", "http"),
+    ("191.96.254.138", "6185", "oiwepino", "agh6av5ktbpm", "http"),
+    ("198.46.161.42", "5092", "oiwepino", "agh6av5ktbpm", "http"),
+
   
 ]
 _proxy_index = [0]
