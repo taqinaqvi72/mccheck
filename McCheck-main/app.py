@@ -229,6 +229,13 @@ PROXIES = [
     ("104.164.49.38", "7693", "ycyhvogd", "hylxzkdt21ut", "http"),
     ("23.26.71.145", "5628", "ycyhvogd", "hylxzkdt21ut", "http"),
 
+     # Webshare account 3 - taqinaqvi072
+    ("31.59.20.176", "6754", "nwjtmabu", "5j1948uorumx", "http"),
+    ("45.38.107.97", "6014", "nwjtmabu", "5j1948uorumx", "http"),
+    ("198.105.121.200", "6462", "nwjtmabu", "5j1948uorumx", "http"),
+    ("198.23.243.226", "6361", "nwjtmabu", "5j1948uorumx", "http"),
+    ("38.154.185.97", "6370", "nwjtmabu", "5j1948uorumx", "http"),
+    ("191.96.254.138", "6185", "nwjtmabu", "5j1948uorumx", "http"),
   
 ]
 _proxy_index = [0]
