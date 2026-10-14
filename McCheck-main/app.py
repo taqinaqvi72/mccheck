@@ -212,14 +212,6 @@ PROXIES = [
     ("38.154.185.97", "6370", "ktgrlvyr", "svo2ci5t400v", "http"),
     ("191.96.254.138", "6185", "ktgrlvyr", "svo2ci5t400v", "http"),
 
-    # acc 3 (taqinaqvi072)
-    ("31.59.20.176", "6754", "nwjtmabu", "5j1948uorumx", "http"),
-    ("45.38.107.97", "6014", "nwjtmabu", "5j1948uorumx", "http"),
-    ("198.105.121.200", "6462", "nwjtmabu", "5j1948uorumx", "http"),
-    ("198.23.243.226", "6361", "nwjtmabu", "5j1948uorumx", "http"),
-    ("38.154.185.97", "6370", "nwjtmabu", "5j1948uorumx", "http"),
-    ("191.96.254.138", "6185", "nwjtmabu", "5j1948uorumx", "http"),
-
     # acc 4 (giftshopacc)
     ("31.59.20.176", "6754", "qzvtstau", "r8kz3itfpupb", "http"),
     ("45.38.107.97", "6014", "qzvtstau", "r8kz3itfpupb", "http"),
@@ -228,13 +220,14 @@ PROXIES = [
     ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
     ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
 
-     # acc 5 (kashaf)
-    ("31.59.20.176", "6754", "oiwepino", "agh6av5ktbpm", "http"),
-    ("45.38.107.97", "6014", "oiwepino", "agh6av5ktbpm", "http"),
-    ("198.23.243.226", "6361", "oiwepino", "agh6av5ktbpm", "http"),
-    ("38.154.185.97", "6370", "oiwepino", "agh6av5ktbpm", "http"),
-    ("191.96.254.138", "6185", "oiwepino", "agh6av5ktbpm", "http"),
-    ("198.46.161.42", "5092", "oiwepino", "agh6av5ktbpm", "http"),
+       # acc 6 (haidi 2)
+    ("45.38.107.97", "6014", "ycyhvogd", "hylxzkdt21ut", "http"),
+    ("198.23.243.226", "6361", "ycyhvogd", "hylxzkdt21ut", "http"),
+    ("38.154.185.97", "6370", "ycyhvogd", "hylxzkdt21ut", "http"),
+    ("191.96.254.138", "6185", "ycyhvogd", "hylxzkdt21ut", "http"),
+    ("198.46.161.42", "5092", "ycyhvogd", "hylxzkdt21ut", "http"),
+    ("104.164.49.38", "7693", "ycyhvogd", "hylxzkdt21ut", "http"),
+    ("23.26.71.145", "5628", "ycyhvogd", "hylxzkdt21ut", "http"),
 
   
 ]
