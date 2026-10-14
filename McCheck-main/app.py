@@ -328,9 +328,9 @@ CARGO_KEYWORDS = ["General Freight", "Refrigerated Food", "Fresh Produce"]
 
 # ---- Concurrency / speed settings -----------------------------------------
 # If FMCSA starts returning 429/403 or errors spike, lower MAX_WORKERS to 5-6.
-MAX_WORKERS = 8
-PER_WORKER_DELAY = 0.1
-GLOBAL_MAX_CONCURRENT = 8
+MAX_WORKERS = 5
+PER_WORKER_DELAY = 0.3
+GLOBAL_MAX_CONCURRENT = 5
 GLOBAL_SEMAPHORE = threading.Semaphore(GLOBAL_MAX_CONCURRENT)
 FETCH_TIMEOUT = 25
 FETCH_RETRIES = 0
