@@ -1,9 +1,9 @@
 """
 Mc Scout — MC Verification & Carrier Intelligence (multi-user)
 ------------------------------------------------------------------
-Install:  pip install flask requests beautifulsoup4 gunicorn psycopg2-binary
+Install:  pip install flask requests beautifulsoup4 lxml gunicorn psycopg2-binary
 Local run:      python app.py
-Production run: gunicorn -w 1 --threads 16 -b 0.0.0.0:5000 app:app
+Production run: gunicorn -w 1 --threads 16 --timeout 120 -b 0.0.0.0:5000 app:app
 
 IMPORTANT: keep -w 1 (single process). Live scan progress (jobs dict)
 lives in server memory keyed by session, so multiple worker PROCESSES
@@ -11,77 +11,47 @@ would each have their own separate memory for in-progress scans.
 --threads gives concurrency within that one process instead.
 
 PERSISTENCE: users, saved MCs, notes, history, prefs and usage are
-stored in a Supabase Postgres database (see db.py) so they survive
-server restarts and redeploys — including on hosts with an ephemeral
-filesystem (Render free tier, serverless, etc.), since the data lives
-in Supabase's cloud database, not on the app's own disk. Only
-in-progress scan state (the `jobs` dict) stays in memory, since that's
-inherently tied to a live running process anyway.
+stored in a Supabase Postgres database (see db.py). Only in-progress
+scan state (the `jobs` dicts) stays in memory.
 
 SETUP: set the DATABASE_URL environment variable to your Supabase
-Postgres connection string (Supabase dashboard -> Settings -> Database
--> Connection string -> use the "Connection pooling" URI). See the
-top of db.py for full setup notes.
+Postgres connection string.
+
+SPEED NOTES (this version):
+  * MAX_WORKERS / GLOBAL_MAX_CONCURRENT raised (8) and PER_WORKER_DELAY
+    lowered (0.1s). If FMCSA starts returning 429/403, drop MAX_WORKERS
+    to 5-6.
+  * Sticky proxy: each session (= each scan stream/thread) keeps ONE proxy
+    and reuses the connection, instead of rotating proxy on every request
+    (which forced a new CONNECT + TLS handshake each time). The proxy is
+    only rotated when it fails.
+  * Motus AuthHist and Motus Register flows now check MCs in parallel
+    (ThreadPoolExecutor) instead of one-by-one.
+  * lxml is used for HTML parsing when installed (falls back to
+    html.parser otherwise).
 
 Data notes: Insurance figures and documents (Authority Letter, W9,
-Certificate of Insurance) are NOT available from FMCSA SAFER (our free
-data source) — the Carrier Details page marks these clearly as
-unavailable rather than showing fabricated numbers.
+Certificate of Insurance) are NOT available from FMCSA SAFER.
 
-PROXY FALLBACK: when every Webshare proxy account's bandwidth/limit is
-exhausted, the scan engine automatically switches to a no-proxy direct
-mode. In that mode requests go straight to FMCSA (rate-limited to
-roughly 1000 MC / 15 min, same pace as the old pre-proxy setup), and
-if FMCSA ever errors/blocks a request the engine auto-pauses for 90
-seconds and then resumes on its own — no manual restart needed.
+PROXY FALLBACK: when every Webshare proxy account is exhausted, the scan
+engine switches to a no-proxy direct mode (~1000 MC / 15 min) and
+auto-pauses 90s on any error, then resumes by itself. An account is only
+marked exhausted after ACCOUNT_FAIL_THRESHOLD CONSECUTIVE failures; any
+success resets its counter.
 
-ACCOUNT-EXHAUSTION FIX: a SINGLE proxy failure (ProxyError or HTTP 407)
-used to mark a whole Webshare account "exhausted" forever, even if it was
-just a one-off glitch. Now an account is only marked exhausted after
-ACCOUNT_FAIL_THRESHOLD CONSECUTIVE failures, and any successful request
-through that account resets its failure count to 0 (see
-mark_proxy_account_exhausted / mark_proxy_account_success below).
+JOB OWNERSHIP: every in-memory scan job is bound to the username that
+created it (owner_username).
 
-JOB OWNERSHIP FIX: every in-memory scan job is bound to the username that
-created it (owner_username). A Flask session cookie can survive a
-logout/login in the same browser, so without this a different account
-could inherit the previous account's job_id and see/control its live scan.
+CARGO FILTER: only the SAFER MC-range scanner (stream_worker) applies the
+cargo filter. Motus AuthHist / Register / Restarted flows accept every
+cargo type.
 
-CARGO FILTER (SAFER MC-range scanner ONLY): the normal MC-range scanner
-(stream_worker) calls qualifies(..., apply_cargo_filter=True), so a carrier
-must carry at least one cargo category enabled in the user's Settings
-(cargo_general / cargo_reefer / cargo_fresh). Every other flow (Motus
-AuthHist, Motus Register, Restarted carriers) goes through process_one(),
-which never passes that flag, so those flows accept every cargo type.
+MOTUS AUTHHIST (Option A): AuthHist rows are already Active+Granted, so
+the SAFER authority_status check is skipped for them
+(skip_authority_check=True). Register (PDF) rows still require SAFER to
+say Authorized.
 
-MOTUS AUTHHIST QUALIFICATION (Option A): rows coming from the Motus
-AuthHist "Daily Difference" feed (motus_worker below) have already
-been confirmed by FMCSA's own AuthHist dataset as status=Active,
-reason=Granted -- i.e. FMCSA itself says the carrier is newly
-authorized. FMCSA's separate public SAFER snapshot can lag AuthHist by
-a day or two, so re-checking "authority_status" on SAFER right after a
-fresh grant can wrongly show "not authorized yet" and bump a genuinely
-qualified carrier into the pending bucket. To avoid that false
-negative, Motus AuthHist results skip the SAFER authority_status check
-entirely (skip_authority_check=True) and treat AuthHist's own
-Active+Granted signal as authoritative. SAFER is still used to pull
-entity_type, power_units, phone, city/state etc. for display/filtering.
-The normal MC-range scanner and the Motus Register (PDF) flow are NOT
-affected by this -- they still require SAFER's authority_status to say
-Authorized, since those carriers have not already been confirmed
-Active+Granted by AuthHist.
-
-RESTARTED CARRIERS (AuthHist All-With-History): a separate historical
-feature (see restart_history.py) — lets a user pick a past year (and
-optionally a single month within it) and find carriers whose authority
-was paused (revoked/terminated/suspended) and later restarted
-(granted/reinstated) in that period. Unlike the Motus feed above, this
-reads FMCSA's full-history AuthHist dataset rather than the
-daily-difference one, so years like 2023/2024 are queryable. As of the
-latest rewrite, restart_history.py no longer dumps the entire dataset —
-it targets just the requested year (or year+month) via a two-phase
-fetch, which is both faster and avoids the memory exhaustion that used
-to crash the process on a full-year (let alone full-history) pull.
+RESTARTED CARRIERS: see restart_history.py.
 """
 import concurrent.futures
 import csv
@@ -104,36 +74,32 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
 
+# lxml is much faster than html.parser; fall back gracefully if missing.
+try:
+    import lxml  # noqa: F401
+    HTML_PARSER = "lxml"
+except ImportError:
+    HTML_PARSER = "html.parser"
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-change-this-in-production")
 
-# "Remember me" support: when checked at login, the session is marked
-# permanent and kept alive for this long. When unchecked, the session
-# stays a normal browser-session cookie (cleared when the browser closes).
+# "Remember me" support.
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
-# Resend (https://resend.com) is used to email signup OTP codes. Set
-# RESEND_API_KEY as an environment variable. RESEND_FROM_EMAIL should be an
-# address on a domain you've verified in Resend (their sandbox
-# "onboarding@resend.dev" sender only delivers to the account owner's own
-# verified email, so it's fine for testing but won't reach real signups —
-# verify your own domain in Resend for production).
+# Resend (https://resend.com) is used to email signup OTP codes.
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "K&A <onboarding@resend.dev>")
-# Every signup OTP is sent here instead of the address the person typed in —
-# this way whoever holds this inbox approves/hands out every signup code.
-# Change via env var if the admin inbox changes.
+# Every signup OTP is sent here instead of the address the person typed in.
 OTP_NOTIFY_EMAIL = os.environ.get("OTP_NOTIFY_EMAIL", "scott.sublimefreight@gmail.com")
-OTP_TTL_SECONDS = 10 * 60  # OTP valid for 10 minutes
-OTP_RESEND_COOLDOWN_SECONDS = 60  # can't request a new OTP more than once a minute
-OTP_MAX_ATTEMPTS = 5  # wrong-code attempts allowed before the OTP is invalidated
+OTP_TTL_SECONDS = 10 * 60
+OTP_RESEND_COOLDOWN_SECONDS = 60
+OTP_MAX_ATTEMPTS = 5
 
 
 def send_otp_email(signup_email, otp):
     """Sends the OTP for a signup attempt on `signup_email` to the admin
-    inbox (OTP_NOTIFY_EMAIL) via Resend, not to the address the person
-    typed in — the admin then hands the code to whoever is signing up.
-    Returns (ok, error_message)."""
+    inbox (OTP_NOTIFY_EMAIL) via Resend. Returns (ok, error_message)."""
     return _send_admin_otp_email(
         subject=f"K&A signup code for {signup_email}",
         html=(
@@ -182,18 +148,14 @@ def _send_admin_otp_email(subject, html):
     except requests.RequestException as e:
         return False, f"Failed to send email: {e}"
 
+
 db.init_db()
 
-# Rotating proxies — har request alag IP/provider se jayegi, block nahi hoga
-# Har proxy: (host, port, user, pass, scheme)
-# scheme "http" -> Webshare style; scheme "https" -> Oxylabs style (unka requirement hai)
+# Rotating proxies. Each proxy: (host, port, user, pass, scheme)
+# A new Webshare account = append its rows below (grouped by "user").
 #
-# Add a 4th (or Nth) Webshare account by simply appending its 6 rows below,
-# following the same pattern — the fallback logic groups proxies by their
-# "user" credential automatically, so no other code changes are needed.
-#
-# SECURITY NOTE: these credentials are in plain text. Consider moving them to
-# environment variables, and rotate them if this file has been shared.
+# SECURITY NOTE: these credentials are in plain text and were shared in a
+# chat. Rotate them in Webshare and move them to environment variables.
 PROXIES = [
 
     # acc 1 (usa)
@@ -220,7 +182,7 @@ PROXIES = [
     ("38.154.185.97", "6370", "qzvtstau", "r8kz3itfpupb", "http"),
     ("191.96.254.138", "6185", "qzvtstau", "r8kz3itfpupb", "http"),
 
-       # acc 6 (haidi 2)
+    # acc 6 (haidi 2)
     ("45.38.107.97", "6014", "ycyhvogd", "hylxzkdt21ut", "http"),
     ("198.23.243.226", "6361", "ycyhvogd", "hylxzkdt21ut", "http"),
     ("38.154.185.97", "6370", "ycyhvogd", "hylxzkdt21ut", "http"),
@@ -229,14 +191,14 @@ PROXIES = [
     ("104.164.49.38", "7693", "ycyhvogd", "hylxzkdt21ut", "http"),
     ("23.26.71.145", "5628", "ycyhvogd", "hylxzkdt21ut", "http"),
 
-     # Webshare account 3 - taqinaqvi072
+    # Webshare account 3 - taqinaqvi072
     ("31.59.20.176", "6754", "nwjtmabu", "5j1948uorumx", "http"),
     ("45.38.107.97", "6014", "nwjtmabu", "5j1948uorumx", "http"),
     ("198.105.121.200", "6462", "nwjtmabu", "5j1948uorumx", "http"),
     ("198.23.243.226", "6361", "nwjtmabu", "5j1948uorumx", "http"),
     ("38.154.185.97", "6370", "nwjtmabu", "5j1948uorumx", "http"),
     ("191.96.254.138", "6185", "nwjtmabu", "5j1948uorumx", "http"),
-  
+
 ]
 _proxy_index = [0]
 _proxy_lock = threading.Lock()
@@ -244,35 +206,21 @@ _proxy_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 # Proxy-account exhaustion tracking + automatic no-proxy fallback
 # ---------------------------------------------------------------------------
-# Distinct Webshare accounts, identified by their "user" credential.
 _ALL_PROXY_ACCOUNTS = set(p[2] for p in PROXIES)
 _exhausted_accounts = set()
 _exhausted_lock = threading.Lock()
 
-# Per-account CONSECUTIVE failure tracking. A single ProxyError/407 no
-# longer exhausts an account outright — only ACCOUNT_FAIL_THRESHOLD failures
-# in a row do. A successful request through the account resets its count.
 _account_fail_counts = {}
 _account_fail_lock = threading.Lock()
-ACCOUNT_FAIL_THRESHOLD = 5  # consecutive failures required before exhausting an account
+ACCOUNT_FAIL_THRESHOLD = 5
 
-# Set once every account above has been marked exhausted. From that point
-# on, fetch_mc_page() stops using proxies entirely and switches to the
-# rate-limited, auto-pausing direct mode.
 _no_proxy_mode = threading.Event()
 
-# Direct (no-proxy) fallback pacing: ~1000 MC per 15 minutes, same as the
-# original pre-proxy setup.
 NO_PROXY_RATE_LIMIT_COUNT = 1000
 NO_PROXY_RATE_LIMIT_WINDOW_SECONDS = 15 * 60
 NO_PROXY_MIN_INTERVAL = NO_PROXY_RATE_LIMIT_WINDOW_SECONDS / NO_PROXY_RATE_LIMIT_COUNT  # ~0.9s
-# On ANY error while in no-proxy mode: pause exactly this long, then resume
-# automatically — no manual restart, no exponential backoff.
 NO_PROXY_ERROR_PAUSE_SECONDS = 90
 
-# Shown at the top of the dashboard (via /api/status -> banner_message) once
-# every Webshare account is exhausted, so users know why scans have slowed
-# down and what their options are.
 FAST_MODE_EXCEEDED_MESSAGE = (
     "Dear user, fast mode requests have been exceeded for this month. "
     "Please try again next month, or contact the developer to upgrade."
@@ -283,12 +231,9 @@ _no_proxy_last_request_time = [0.0]
 
 
 def mark_proxy_account_exhausted(user):
-    """Called when a given Webshare account's proxies fail (ProxyError or
-    407). Only marks the account exhausted after ACCOUNT_FAIL_THRESHOLD
-    CONSECUTIVE failures — a single timeout/glitch should not permanently
-    kill an account that still has plenty of bandwidth left. Once every
-    account has been exhausted this way, flips the whole app into no-proxy
-    fallback mode."""
+    """Counts a failure against a Webshare account. Only after
+    ACCOUNT_FAIL_THRESHOLD CONSECUTIVE failures is the account marked
+    exhausted. Once all accounts are exhausted, flips to no-proxy mode."""
     if user is None:
         return
 
@@ -297,7 +242,7 @@ def mark_proxy_account_exhausted(user):
         fail_count = _account_fail_counts[user]
 
     if fail_count < ACCOUNT_FAIL_THRESHOLD:
-        return  # not exhausted yet — just a blip, keep using this account
+        return
 
     with _exhausted_lock:
         if user in _exhausted_accounts:
@@ -312,9 +257,7 @@ def mark_proxy_account_exhausted(user):
 
 
 def mark_proxy_account_success(user):
-    """Call this right after a request succeeds through this account.
-    Resets its consecutive-failure counter — a couple of earlier blips
-    shouldn't count against it forever once it's clearly working again."""
+    """Resets the consecutive-failure counter after a successful request."""
     if user is None:
         return
     with _account_fail_lock:
@@ -323,9 +266,8 @@ def mark_proxy_account_success(user):
 
 
 def wait_for_no_proxy_slot():
-    """Blocks (if needed) so that, across all scan threads combined, direct
-    requests stay at roughly NO_PROXY_RATE_LIMIT_COUNT per
-    NO_PROXY_RATE_LIMIT_WINDOW_SECONDS."""
+    """Paces direct requests across all threads to roughly
+    NO_PROXY_RATE_LIMIT_COUNT per NO_PROXY_RATE_LIMIT_WINDOW_SECONDS."""
     with _no_proxy_pace_lock:
         now = time.time()
         earliest_allowed = _no_proxy_last_request_time[0] + NO_PROXY_MIN_INTERVAL
@@ -370,11 +312,6 @@ VALID_US_STATES = {
 }
 
 # Cargo classification: label matching -> category (fresh / reefer / general)
-# NOTE: cargo_carried / cargo_categories are always parsed and returned for
-# display (results, CSVs, carrier detail page). They only affect
-# qualification in the SAFER MC-range scanner
-# (qualifies(..., apply_cargo_filter=True)); all other flows (Motus
-# AuthHist, Motus Register, Restarted) accept every cargo type.
 CARGO_CATEGORY_MAP = {
     "fresh produce": "fresh",
     "perishable": "fresh",
@@ -389,23 +326,20 @@ CARGO_CATEGORY_MAP = {
 }
 CARGO_KEYWORDS = ["General Freight", "Refrigerated Food", "Fresh Produce"]
 
-MAX_WORKERS = 3
-PER_WORKER_DELAY = 0.5
-GLOBAL_MAX_CONCURRENT = 3
+# ---- Concurrency / speed settings -----------------------------------------
+# If FMCSA starts returning 429/403 or errors spike, lower MAX_WORKERS to 5-6.
+MAX_WORKERS = 8
+PER_WORKER_DELAY = 0.1
+GLOBAL_MAX_CONCURRENT = 8
 GLOBAL_SEMAPHORE = threading.Semaphore(GLOBAL_MAX_CONCURRENT)
 FETCH_TIMEOUT = 25
 FETCH_RETRIES = 0
 
-# When FMCSA rate-limits us (many errors in a row), wait this many seconds
-# before trying again. Doubles each time up to MAX_BACKOFF.
-# NOTE: this backoff/threshold set only applies while proxies are still in
-# use. Once _no_proxy_mode is set, fetch_mc_page() handles its own simple
-# fixed 90s auto-pause internally (see NO_PROXY_ERROR_PAUSE_SECONDS above)
-# and this block is bypassed.
+# Backoff only applies while proxies are in use (see fetch_mc_page).
 RATE_LIMIT_BACKOFF_BASE = 45
 RATE_LIMIT_MAX_BACKOFF = 300
-CONSECUTIVE_ERROR_THRESHOLD = 4  # errors in a row before triggering backoff
-MAX_BACKOFF_CYCLES_PER_MC = 3  # give up on an MC after this many backoff cycles (avoids infinite retry loop if proxies are exhausted/blocked)
+CONSECUTIVE_ERROR_THRESHOLD = 4
+MAX_BACKOFF_CYCLES_PER_MC = 3
 JOB_TTL_SECONDS = 60 * 60
 
 jobs_lock = threading.Lock()
@@ -477,7 +411,6 @@ def new_restart_job_state():
         "finished_time": None,
         "stop_requested": False,
         "year": None,
-        # Optional 1-12; None means "whole year" (see restart_worker below).
         "month": None,
         "source_row_count": 0,
         "fetch_error": None,
@@ -516,20 +449,27 @@ def get_or_create_restart_job_id():
     return job_id
 
 
+def _make_thread_session_getter():
+    """Returns a function that gives each worker THREAD its own long-lived
+    requests.Session (with its own sticky proxy). Sessions are not shared
+    across threads, and reusing one keeps the proxy connection alive."""
+    tls = threading.local()
+
+    def get_session():
+        if not hasattr(tls, "s"):
+            tls.s = init_session()
+        return tls.s
+
+    return get_session
+
+
 def motus_worker(job_id, username, from_date, to_date):
     """Run Motus AuthHist Daily Difference -> FMCSA qualification checks.
 
-    The Motus module now returns authority-history fields in addition to
-    the USDOT number. Those fields are preserved on every result so the
-    UI/CSV can show the authority date and docket that produced the lead.
-
-    OPTION A FIX: every row here has already been confirmed by FMCSA's own
-    AuthHist dataset as status=Active, reason=Granted (see motus.py's
-    _is_new_grant()). Because SAFER's public snapshot can lag AuthHist by
-    a day or two, we skip re-checking authority_status against SAFER for
-    these rows (skip_authority_check=True below) and treat AuthHist's own
-    signal as authoritative. SAFER is still queried to pull entity_type,
-    power_units, phone, city/state etc.
+    Rows are already Active+Granted per FMCSA AuthHist, so SAFER's
+    authority_status check is skipped (skip_authority_check=True). SAFER is
+    still queried for entity_type, power_units, phone, city/state etc.
+    MCs are checked in parallel (MAX_WORKERS threads).
     """
     prefs = db.get_prefs(username)
 
@@ -557,9 +497,6 @@ def motus_worker(job_id, username, from_date, to_date):
         })
 
     try:
-        # fetch_and_parse_range() is kept as the public interface for
-        # compatibility, but it now reads Motus AuthHist Daily Difference
-        # rather than downloading Register PDFs.
         deduped_rows, source_count = motus_mod.fetch_and_parse_range(
             from_date,
             to_date,
@@ -582,8 +519,6 @@ def motus_worker(job_id, username, from_date, to_date):
 
         st["stage"] = "checking"
         st["total"] = len(deduped_rows)
-        # This field is retained for frontend compatibility. It now means
-        # filtered AuthHist records, not Register PDFs.
         st["register_count"] = len(deduped_rows)
 
         st["log"].append({
@@ -596,42 +531,33 @@ def motus_worker(job_id, username, from_date, to_date):
             ),
         })
 
-    # Same FMCSA session/proxy system as the normal MC scanner.
-    session_obj = init_session()
+    get_sess = _make_thread_session_getter()
 
-    for row in deduped_rows:
+    def check_row(row):
         with motus_jobs_lock:
             if motus_jobs.get(job_id, {}).get("stop_requested"):
-                break
+                return
 
         usdot = row["usdot"]
-
-        # Motus AuthHist provides USDOT numbers, so query SAFER by USDOT.
-        # skip_authority_check=True: AuthHist already confirmed
-        # Active+Granted, so we don't let a lagging SAFER snapshot
-        # wrongly reject a genuinely newly-authorized carrier.
-        # (apply_cargo_filter is NOT passed -> every cargo type accepted.)
         entry = process_one(
             usdot,
-            session_obj,
+            get_sess(),
             prefs,
             query_param="USDOT",
             skip_authority_check=True,
         )
 
-        # Preserve the official AuthHist fields on the FMCSA result.
         entry["motus_docket"] = row.get("docket", "")
         entry["motus_category"] = row.get("category", "")
         entry["motus_status"] = row.get("status", "")
         entry["motus_reason"] = row.get("reason", "")
         entry["motus_status_change_date"] = row.get("status_change_date", "")
-        # Keep this alias convenient for frontend table columns.
         entry["motus_authority_date"] = row.get("status_change_date", "")
 
         with motus_jobs_lock:
             st = motus_jobs.get(job_id)
             if st is None:
-                break
+                return
 
             st["current"] += 1
             st["log"].append(entry)
@@ -645,6 +571,9 @@ def motus_worker(job_id, username, from_date, to_date):
             else:
                 st["pending_results"].append(entry)
 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        list(ex.map(check_row, deduped_rows))
+
     with motus_jobs_lock:
         st = motus_jobs.get(job_id)
         if st:
@@ -656,8 +585,7 @@ def motus_worker(job_id, username, from_date, to_date):
 def motus_register_worker(job_id, username, from_date, to_date):
     """Daily Register (PDF) -> FMCSA qualification checks. Lists every
     new application filed in the date range, regardless of whether
-    authority has been granted yet -- most will show as pending/not
-    authorized, which is expected for this feed."""
+    authority has been granted yet. Checked in parallel."""
     prefs = db.get_prefs(username)
 
     with motus_register_jobs_lock:
@@ -694,26 +622,24 @@ def motus_register_worker(job_id, username, from_date, to_date):
         st["total"] = len(deduped_rows)
         st["register_count"] = len(deduped_rows)
 
-    session_obj = init_session()
+    get_sess = _make_thread_session_getter()
 
-    for row in deduped_rows:
+    def check_row(row):
         with motus_register_jobs_lock:
             if motus_register_jobs.get(job_id, {}).get("stop_requested"):
-                break
+                return
 
         usdot = row["usdot"]
-        # NOTE: Register (PDF) rows are just filed APPLICATIONS, not
-        # confirmed grants -- unlike motus_worker() above, we deliberately
-        # do NOT skip the SAFER authority_status check here, since most of
-        # these are genuinely still pending/not-authorized.
-        entry = process_one(usdot, session_obj, prefs, query_param="USDOT")
+        # Register rows are filed APPLICATIONS, not confirmed grants, so we
+        # deliberately do NOT skip the SAFER authority_status check here.
+        entry = process_one(usdot, get_sess(), prefs, query_param="USDOT")
         entry["motus_raw"] = row.get("raw", "")
         entry["motus_category"] = row.get("category", "")
 
         with motus_register_jobs_lock:
             st = motus_register_jobs.get(job_id)
             if st is None:
-                break
+                return
             st["current"] += 1
             st["log"].append(entry)
             if len(st["log"]) > 200:
@@ -725,6 +651,9 @@ def motus_register_worker(job_id, username, from_date, to_date):
             else:
                 st["pending_results"].append(entry)
 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        list(ex.map(check_row, deduped_rows))
+
     with motus_register_jobs_lock:
         st = motus_register_jobs.get(job_id)
         if st:
@@ -734,19 +663,11 @@ def motus_register_worker(job_id, username, from_date, to_date):
 
 
 def restart_worker(job_id, username, year, month=None):
-    """Fetches FMCSA AuthHist "All With History" for `year` — optionally
-    narrowed to a single `month` (1-12) — and detects carriers whose
-    authority was paused then later restarted. Does NOT re-check each MC
-    against SAFER by default — it just reports what AuthHist itself says
-    (MC number + pause date + restart date), since that's the client's
-    requirement. If the MC already exists in this user's saved/qualified
-    data, we attach power_units/cargo for free (no extra FMCSA request).
-
-    month=None means the whole year (matches previous behaviour); passing
-    a month narrows both the underlying fetch (restart_history_mod does a
-    much smaller, targeted query) and the final results to that period,
-    so a single-month search finishes markedly faster than a full year.
-    """
+    """Fetches FMCSA AuthHist "All With History" for `year` (optionally a
+    single `month` 1-12) and detects carriers whose authority was paused
+    then later restarted. Does NOT re-check each MC against SAFER; if the
+    MC is already in the user's saved data, power_units/cargo are attached
+    for free."""
     with restart_jobs_lock:
         st = restart_jobs.get(job_id)
         if st is None:
@@ -795,8 +716,6 @@ def restart_worker(job_id, username, year, month=None):
         entry = dict(row)
         entry["mc_number"] = row["docket"] or row["usdot"]
 
-        # Free enrichment: if this MC is already saved by the user, pull
-        # power_units/cargo from there instead of hitting SAFER again.
         saved = db.get_saved_one(username, entry["mc_number"]) if entry["mc_number"] else None
         entry["power_units"] = saved.get("power_units") if saved else None
         entry["cargo_carried"] = saved.get("cargo_carried", "") if saved else ""
@@ -819,17 +738,15 @@ def restart_worker(job_id, username, year, month=None):
             st["stage"] = "stopped" if st.get("stop_requested") else "done"
             st["finished_time"] = time.time()
 
+
 # ---------------------------------------------------------------------------
 # Plans
 # ---------------------------------------------------------------------------
-# total_limit  -> lifetime cap on MCs ever checked (demo only)
-# daily_limit  -> MCs checkable per calendar day (1 month plan only)
-# unlimited=True means neither limit applies
 PLAN_INFO = {
     "demo": {
         "label": "Demo",
         "price_pkr": 0,
-        "total_limit": 10000,   # can check 10000 MC total, then must upgrade
+        "total_limit": 10000,
         "daily_limit": None,
         "unlimited": False,
     },
@@ -837,7 +754,7 @@ PLAN_INFO = {
         "label": "1 Month",
         "price_pkr": 5000,
         "total_limit": None,
-        "daily_limit": 10000,  # 10k MC/day
+        "daily_limit": 10000,
         "unlimited": False,
     },
     "1_year": {
@@ -866,14 +783,7 @@ def plan_info_for(username):
 def login_required(view):
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
-        # Just check the session flag — no DB round-trip here. Previously
-        # this called db.get_user() on EVERY single request (including the
-        # dashboard's once-a-second /api/status poll), which was fine with
-        # local SQLite but adds a real network hop now that the DB lives on
-        # Supabase — that's what was making everything (especially live
-        # scan updates) feel sluggish. The user's identity was already
-        # verified at login time; we don't need to re-verify it against the
-        # DB on every poll.
+        # Only checks the session flag — no DB round-trip per request.
         if not session.get("username"):
             return redirect(url_for("login"))
         return view(*args, **kwargs)
@@ -882,9 +792,6 @@ def login_required(view):
 
 def new_job_state(owner_username=None):
     return {
-        # Every in-memory scan job belongs to exactly one logged-in user.
-        # This prevents a reused Flask session/job_id from exposing another
-        # account's live scan state.
         "owner_username": owner_username,
         "running": False,
         "current": 0,
@@ -911,10 +818,7 @@ def get_or_create_job_id():
     with jobs_lock:
         current_job = jobs.get(job_id) if job_id else None
 
-        # IMPORTANT: a Flask session cookie can survive a logout/login in the
-        # same browser. If the new account inherits the previous account's
-        # job_id, it would see/control that account's live scan. Bind every
-        # job to its owner and create a fresh job whenever the owner differs.
+        # Bind every job to its owner; create a fresh job if owner differs.
         if (
             not username
             or current_job is None
@@ -939,10 +843,15 @@ def cleanup_old_jobs():
 
 
 def init_session():
+    """Creates a requests.Session with a STICKY proxy: the session keeps the
+    same proxy (and its open connection) for all its requests, and only
+    rotates when that proxy fails (see fetch_mc_page)."""
     s = requests.Session()
+    s._acct = None
     if not _no_proxy_mode.is_set():
-        proxy, _ = get_next_proxy()
+        proxy, acct = get_next_proxy()
         s.proxies = proxy or {}
+        s._acct = acct
     try:
         s.get(SNAPSHOT_URL, headers=HEADERS, timeout=15)
     except requests.RequestException:
@@ -954,20 +863,17 @@ def fetch_mc_page(mc_number, session_obj, query_param="MC_MX"):
     """Returns:
     - html string on success
     - "__NOT_FOUND__" sentinel when FMCSA genuinely has no record
-    - None when the fetch kept failing (timeout/connection/5xx) after retries —
-      this is a technical failure, NOT the same as a genuine not-found.
+    - None when the fetch kept failing (timeout/connection/5xx) — a
+      technical failure, NOT the same as a genuine not-found.
 
-    Proxy mode: rotates through non-exhausted Webshare accounts. If a
-    proxy itself fails (account out of bandwidth), that failure is counted
-    against the account (see mark_proxy_account_exhausted) and the request
-    is retried right away on another account/proxy, transparently. An
-    account only gets marked exhausted after several CONSECUTIVE failures —
-    a single blip won't take it out, and a success resets its counter.
+    Proxy mode: the session keeps ONE sticky proxy. If that proxy fails,
+    the failure is counted against its account and the session picks a new
+    proxy on the next loop. An account is only marked exhausted after
+    several CONSECUTIVE failures.
 
-    No-proxy fallback mode (once every account is exhausted): requests go
-    straight to FMCSA, paced to ~1000 MC / 15 min. Any error (timeout,
-    connection issue, 429/403) triggers an automatic 90-second pause, then
-    the SAME MC is retried automatically — no manual restart needed.
+    No-proxy fallback mode (once every account is exhausted): direct
+    requests paced to ~1000 MC / 15 min; any error -> 90s auto-pause, then
+    the same MC is retried automatically.
     """
     params = {
         "searchtype": "ANY",
@@ -982,53 +888,52 @@ def fetch_mc_page(mc_number, session_obj, query_param="MC_MX"):
         if no_proxy:
             wait_for_no_proxy_slot()
             session_obj.proxies = {}
+            session_obj._acct = None
             account_user = None
         else:
-            proxy, account_user = get_next_proxy()
-            if proxy is None:
-                # Became fully exhausted between calls — loop back around,
-                # this time it'll take the no_proxy branch above.
-                continue
-            session_obj.proxies = proxy
+            # Sticky proxy: only pick a new one if this session has none
+            # yet, or its account has since been marked exhausted.
+            if (
+                not session_obj.proxies
+                or getattr(session_obj, "_acct", None) in _exhausted_accounts
+            ):
+                proxy, acct = get_next_proxy()
+                if proxy is None:
+                    # Became fully exhausted — next loop takes no-proxy branch.
+                    continue
+                session_obj.proxies = proxy
+                session_obj._acct = acct
+            account_user = getattr(session_obj, "_acct", None)
 
         with GLOBAL_SEMAPHORE:
             try:
                 r = session_obj.get(BASE_URL, params=params, headers=HEADERS, timeout=FETCH_TIMEOUT)
                 r.raise_for_status()
-                # Request went through cleanly — reset this account's
-                # consecutive-failure count so a couple of earlier blips
-                # don't linger against it.
                 if not no_proxy:
                     mark_proxy_account_success(account_user)
             except requests.exceptions.ProxyError:
-                # The proxy itself refused/failed — could mean that
-                # account's bandwidth/limit is used up, or could just be a
-                # transient blip. mark_proxy_account_exhausted() only
-                # actually exhausts the account after several of these in
-                # a row.
                 if not no_proxy:
                     mark_proxy_account_exhausted(account_user)
-                    continue  # immediately retry — next account, or no-proxy mode
-                # (shouldn't happen once no_proxy is True, but stay safe)
+                    session_obj.proxies = {}  # force rotation to another proxy
+                    continue
                 time.sleep(NO_PROXY_ERROR_PAUSE_SECONDS)
                 continue
             except requests.RequestException:
                 if no_proxy:
                     time.sleep(NO_PROXY_ERROR_PAUSE_SECONDS)
                     continue
-                # Proxy-mode network error: hand back to the existing
-                # stream_worker backoff logic, unchanged from before.
+                session_obj.proxies = {}  # rotate proxy for the next attempt
                 return None
 
         if r.status_code in (403, 407, 429):
-            # 407 on a proxied request = that account's auth/bandwidth is
-            # done, even though it didn't raise ProxyError outright.
             if not no_proxy and r.status_code == 407:
                 mark_proxy_account_exhausted(account_user)
+                session_obj.proxies = {}
                 continue
             if no_proxy:
                 time.sleep(NO_PROXY_ERROR_PAUSE_SECONDS)
                 continue
+            session_obj.proxies = {}  # try a different proxy after the wait
             time.sleep(60)
             continue
 
@@ -1105,7 +1010,7 @@ def cargo_categories(cargo_list):
 
 
 def parse_carrier(html, mc_number):
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, HTML_PARSER)
     text = soup.get_text("\n", strip=True)
 
     entity_type = get_field(text, "Entity Type:")
@@ -1143,19 +1048,12 @@ def parse_carrier(html, mc_number):
 def qualifies(data, prefs=None, skip_authority_check=False, apply_cargo_filter=False):
     """Qualifies on entity type, authority status, and power units.
 
-    apply_cargo_filter: when True (SAFER MC-range scanner only), the carrier
-    must also carry at least one cargo category the user enabled in Settings
-    (cargo_general / cargo_reefer / cargo_fresh). Motus AuthHist, Motus
-    Register and Restarted flows leave this False, so every cargo type
-    is accepted there.
+    apply_cargo_filter: True only for the SAFER MC-range scanner — the
+    carrier must carry at least one cargo category enabled in Settings.
 
-    skip_authority_check: True hone par SAFER ka 'authority_status' check
-    skip ho jata hai. Ye sirf Motus AuthHist ke 'Granted' rows ke liye use
-    hota hai — kyunke FMCSA ka apna AuthHist dataset khud confirm kar chuka
-    hota hai ke carrier newly-authorized hai, jabke SAFER ka public snapshot
-    1-2 din late sync hota hai. Isliye AuthHist ko hi authoritative maana
-    jata hai, SAFER sirf entity_type aur power_units nikalne ke liye use
-    hota hai.
+    skip_authority_check: True only for Motus AuthHist 'Granted' rows —
+    FMCSA's AuthHist already confirmed the carrier is newly authorized,
+    while SAFER's public snapshot can lag by 1-2 days.
     """
     prefs = prefs or {}
     min_pu = prefs.get("min_power_units", 0)
@@ -1187,7 +1085,7 @@ def qualifies(data, prefs=None, skip_authority_check=False, apply_cargo_filter=F
 
 
 def process_one(mc, session_obj, prefs, query_param="MC_MX", skip_authority_check=False):
-    # Used by the Motus AuthHist / Motus Register flows. It deliberately does
+    # Used by the Motus AuthHist / Motus Register flows. Deliberately does
     # NOT pass apply_cargo_filter, so those flows accept every cargo type.
     time.sleep(PER_WORKER_DELAY)
     html = fetch_mc_page(mc, session_obj, query_param)
@@ -1216,8 +1114,8 @@ def process_one(mc, session_obj, prefs, query_param="MC_MX", skip_authority_chec
 
 
 RESULT_FIELDS = ["mc_number", "entity_type", "authority_status", "legal_name",
-                  "dba_name", "phone", "power_units", "cargo_carried",
-                  "cargo_categories", "city", "state", "address_line1"]
+                 "dba_name", "phone", "power_units", "cargo_carried",
+                 "cargo_categories", "city", "state", "address_line1"]
 
 
 def worker(job_id, username, start_mc, end_mc):
@@ -1244,8 +1142,6 @@ def worker(job_id, username, start_mc, end_mc):
         st["backoff_seconds"] = 0
 
     # Run MAX_WORKERS independent sequential streams in threads.
-    # Each stream is polite (PER_WORKER_DELAY between its own requests),
-    # but the streams are offset so overall throughput ≈ MAX_WORKERS × per-stream rate.
     mc_list = list(range(start_mc, end_mc + 1))
     result_lock = threading.Lock()
     completed_counter = [0]
@@ -1288,9 +1184,7 @@ def worker(job_id, username, start_mc, end_mc):
                 if consecutive_errors >= CONSECUTIVE_ERROR_THRESHOLD:
                     backoff_cycles_on_this_mc += 1
 
-                    # Give up after too many backoff cycles stuck on the same MC
-                    # (proxy pool likely exhausted/blocked) — mark as fetch_error
-                    # and move on, instead of retrying forever.
+                    # Give up after too many backoff cycles on the same MC.
                     if backoff_cycles_on_this_mc >= MAX_BACKOFF_CYCLES_PER_MC:
                         with jobs_lock:
                             st = jobs.get(job_id)
@@ -1356,8 +1250,7 @@ def worker(job_id, username, start_mc, end_mc):
                             st["not_found_count"] += 1
                 else:
                     data = parse_carrier(html, mc)
-                    # SAFER MC-range scanner ONLY: also enforce the user's
-                    # cargo-type preferences (general / reefer / fresh).
+                    # SAFER MC-range scanner ONLY: also enforce cargo prefs.
                     qualified = qualifies(data, prefs, apply_cargo_filter=True)
                     entry = dict(data)
                     entry["qualified"] = qualified
@@ -1414,7 +1307,6 @@ def worker(job_id, username, start_mc, end_mc):
             not_found = st["not_found_count"]
             error_count = st["error_count"]
         else:
-            # Job was removed from memory while running — nothing to record.
             return
 
     db.add_usage(username, total_checked)
@@ -1443,19 +1335,10 @@ def login():
         remember = request.form.get("remember")
         user = db.find_user_by_identifier(identifier)
         if user and check_password_hash(user["password_hash"], password):
-            # Never let a newly logged-in account inherit the previous
-            # account's in-memory scanner job from the same browser session.
             session.pop("job_id", None)
             session["username"] = user["username"]
-            # Cache admin status in the session so we don't need a DB hit
-            # to check it on every request (same reasoning as login_required).
             session["is_admin"] = bool(user.get("is_admin"))
-            # "Remember me" checked -> keep the session alive across browser
-            # restarts for PERMANENT_SESSION_LIFETIME (30 days).
-            # Unchecked -> normal session cookie, cleared when browser closes.
             session.permanent = bool(remember)
-            # Make sure this user's prefs/usage rows exist — done once here
-            # at login instead of on every single get_prefs/get_usage call.
             db.ensure_user_rows(user["username"])
             return redirect(url_for("dashboard"))
         error = "Invalid email/username or password"
@@ -1531,10 +1414,9 @@ def signup_complete():
     db.ensure_user_rows(username)
     db.delete_otp(email)
 
-    # Fresh signup must not inherit any previous job from this browser.
     session.pop("job_id", None)
     session["username"] = username
-    session["is_admin"] = False  # new signups are never admins
+    session["is_admin"] = False
     session.permanent = False
 
     return jsonify({"ok": True})
@@ -1620,9 +1502,8 @@ def forgot_password_complete():
 
 @app.route("/logout")
 def logout():
-    # Remove only this browser session's pointer. The running job itself is
-    # intentionally left alive so the user's scan can continue in the
-    # background while another account uses this browser/session.
+    # Remove only this browser session's pointer; the running job stays
+    # alive so a scan can continue in the background.
     session.pop("job_id", None)
     session.pop("username", None)
     session.pop("is_admin", None)
@@ -1909,7 +1790,7 @@ def restarted_start():
 
     data = request.get_json(force=True)
     year = data.get("year")
-    # Optional: 1-12. None/blank/"0" means "whole year" (previous behaviour).
+    # Optional: 1-12. None/blank/"0" means "whole year".
     month = data.get("month")
 
     try:
@@ -2120,12 +2001,7 @@ def stop():
 @login_required
 def reset():
     """Force-abandon the current user's job and hand the session a brand new,
-    clean job slot — used when a scan appears stuck (e.g. deep in a long
-    FMCSA/proxy retry-backoff cycle) and a normal Stop isn't clearing it
-    fast enough. The old job is told to stop and left to finish quietly
-    in the background under its old id; it will NOT touch the new job's
-    state since they're different dict keys, so nothing gets corrupted.
-    """
+    clean job slot — used when a scan appears stuck."""
     old_job_id = session.get("job_id")
     with jobs_lock:
         if old_job_id and old_job_id in jobs:
@@ -2149,11 +2025,8 @@ def status():
         total = st["total"]
 
         if st["running"]:
-            # Still going — elapsed grows against "now".
             elapsed = (time.time() - st["start_time"]) if st["start_time"] else 0
         elif st["finished_time"] and st["start_time"]:
-            # Finished — freeze elapsed at the moment it actually finished,
-            # instead of letting it keep growing against "now".
             elapsed = st["finished_time"] - st["start_time"]
         else:
             elapsed = 0
@@ -2351,7 +2224,6 @@ def update_account():
         return jsonify({"error": "Nothing to update"}), 400
 
     # Current password is only required when changing the password itself.
-    # Username/email changes don't need it.
     if new_password:
         if not current_password or not check_password_hash(user["password_hash"], current_password):
             return jsonify({"error": "Current password is incorrect"}), 403
@@ -2370,8 +2242,7 @@ def update_account():
         if db.username_taken(new_username, exclude_username=username):
             return jsonify({"error": "That username is already taken"}), 400
         db.rename_username(username, new_username)
-        # Keep the in-memory job bound to the renamed account, otherwise the
-        # owner check would orphan the user's own running/finished scan.
+        # Keep the in-memory job bound to the renamed account.
         old_job_id = session.get("job_id")
         with jobs_lock:
             if old_job_id and old_job_id in jobs and jobs[old_job_id].get("owner_username") == username:
@@ -2383,7 +2254,7 @@ def update_account():
 
 
 # ---------------------------------------------------------------------------
-# Admin (visible only to accounts with is_admin=True, e.g. ka@gmail.com)
+# Admin (visible only to accounts with is_admin=True)
 # ---------------------------------------------------------------------------
 @app.route("/api/admin/users", methods=["GET"])
 @admin_required
